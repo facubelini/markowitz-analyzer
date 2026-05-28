@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Markowitz Portfolio Analyzer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <div class="app">
+
+    <header class="header">
+      <div class="header-content">
+        <div class="logo">
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+            <path d="M3 25 L10 12 L17 18 L23 6" stroke="#00d4aa" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="23" cy="6" r="3" fill="#00d4aa"/>
+            <circle cx="17" cy="18" r="2.5" fill="#ffd700"/>
+            <circle cx="10" cy="12" r="2.5" fill="#4ecdc4"/>
+            <circle cx="3" cy="25" r="2.5" fill="#ff6b6b"/>
+          </svg>
+          <h1>Markowitz Analyzer</h1>
+        </div>
+        <div class="header-badge">Modern Portfolio Theory · Monte Carlo</div>
+      </div>
+    </header>
+
+    <main class="main">
+
+      <!-- Input card -->
+      <section class="card input-card">
+        <h2 class="section-title">Portfolio Setup</h2>
+
+        <div class="input-row">
+          <input
+            type="text"
+            id="ticker-input"
+            class="ticker-input"
+            placeholder="Enter ticker(s), e.g. AAPL or AAPL, TSLA, NVDA"
+            maxlength="60"
+            autocomplete="off"
+            autocapitalize="characters"
+            spellcheck="false"
+          >
+          <button id="add-ticker-btn" class="btn btn-secondary">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
+              <path d="M7 0a7 7 0 100 14A7 7 0 007 0zm1 6V3a1 1 0 00-2 0v3H3a1 1 0 000 2h3v3a1 1 0 002 0V8h3a1 1 0 000-2H8z"/>
+            </svg>
+            Add
+          </button>
+        </div>
+        <p class="input-hint">Add 2–10 tickers. Press Enter or comma-separate to add multiple at once.</p>
+
+        <div id="ticker-error" class="error-msg hidden"></div>
+
+        <div class="chips-container">
+          <div id="ticker-chips" class="ticker-chips"></div>
+        </div>
+
+        <div class="input-footer">
+          <div class="input-meta">
+            <span class="meta-icon">
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="currentColor" opacity=".5"><circle cx="6.5" cy="6.5" r="6" stroke="currentColor" stroke-width="1" fill="none"/><path d="M6.5 4v3.5l2 1.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+            </span>
+            Yahoo Finance · 2 years daily · No API key required
+          </div>
+          <button id="analyze-btn" class="btn btn-primary btn-large">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M2 13h12M4 10l3-5 2.5 3L12 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+            </svg>
+            Run Analysis
+          </button>
+        </div>
+      </section>
+
+      <!-- Loading -->
+      <div id="loading-state" class="loading-section hidden">
+        <div class="loading-header">
+          <div class="spinner"></div>
+          <div>
+            <div class="loading-title">Fetching data &amp; running simulation…</div>
+            <div id="loading-status" class="loading-sub">Initializing</div>
+          </div>
+        </div>
+        <div id="ticker-status-list" class="ticker-status-list"></div>
+        <div class="skeleton-row">
+          <div class="skeleton"></div>
+          <div class="skeleton"></div>
+          <div class="skeleton skeleton--tall"></div>
+        </div>
+      </div>
+
+      <!-- Results -->
+      <div id="results" class="results hidden">
+
+        <div id="summary-bar" class="summary-bar"></div>
+
+        <!-- Row 1: Frontier + Weights -->
+        <div class="grid grid--60-40">
+
+          <section class="card">
+            <div class="card-header">
+              <h2>Efficient Frontier</h2>
+              <div class="legend">
+                <span class="legend-item">
+                  <svg width="13" height="13" viewBox="0 0 13 13" fill="#00e87a"><polygon points="6.5,0 8.5,4.5 13,4.5 9.5,8 11,13 6.5,10 2,13 3.5,8 0,4.5 4.5,4.5"/></svg>
+                  Max Sharpe
+                </span>
+                <span class="legend-item">
+                  <svg width="13" height="13" viewBox="0 0 13 13" fill="#ff8c00"><polygon points="6.5,0 13,13 0,13"/></svg>
+                  Min Variance
+                </span>
+                <span class="legend-item sharpe-grad-legend">
+                  <span class="grad-bar"></span>
+                  Sharpe
+                </span>
+              </div>
+            </div>
+            <div class="chart-wrap chart-wrap--frontier">
+              <canvas id="frontier-chart"></canvas>
+            </div>
+          </section>
+
+          <section class="card">
+            <div class="card-header">
+              <h2>Portfolio Weights</h2>
+            </div>
+            <div class="tab-bar">
+              <button class="tab-btn active" data-tab="max-sharpe">Max Sharpe</button>
+              <button class="tab-btn" data-tab="min-var">Min Variance</button>
+              <button class="tab-btn" data-tab="equal">Equal Weight</button>
+            </div>
+            <div id="tab-max-sharpe" class="tab-panel active">
+              <div id="metrics-max-sharpe" class="metrics-row"></div>
+              <div class="chart-wrap chart-wrap--weights"><canvas id="wc-max-sharpe"></canvas></div>
+            </div>
+            <div id="tab-min-var" class="tab-panel">
+              <div id="metrics-min-var" class="metrics-row"></div>
+              <div class="chart-wrap chart-wrap--weights"><canvas id="wc-min-var"></canvas></div>
+            </div>
+            <div id="tab-equal" class="tab-panel">
+              <div id="metrics-equal" class="metrics-row"></div>
+              <div class="chart-wrap chart-wrap--weights"><canvas id="wc-equal"></canvas></div>
+            </div>
+          </section>
+
+        </div>
+
+        <!-- Row 2: Correlation + Table -->
+        <div class="grid grid--50-50">
+
+          <section class="card">
+            <div class="card-header">
+              <h2>Correlation Matrix</h2>
+              <div class="corr-scale">
+                <span class="corr-scale-label">−1</span>
+                <span class="corr-scale-bar"></span>
+                <span class="corr-scale-label">+1</span>
+              </div>
+            </div>
+            <div id="corr-matrix" class="corr-matrix"></div>
+          </section>
+
+          <section class="card">
+            <div class="card-header">
+              <h2>Asset Statistics</h2>
+              <span class="table-hint">Click headers to sort</span>
+            </div>
+            <div class="table-scroll">
+              <table class="stats-table" id="stats-table">
+                <thead>
+                  <tr>
+                    <th class="sortable" data-col="ticker" data-type="str">Ticker <span class="sort-arrow">↕</span></th>
+                    <th class="sortable" data-col="annReturn" data-type="num">Ann. Return <span class="sort-arrow">↕</span></th>
+                    <th class="sortable" data-col="annVol" data-type="num">Ann. Vol <span class="sort-arrow">↕</span></th>
+                    <th class="sortable" data-col="sharpe" data-type="num">Sharpe <span class="sort-arrow">↕</span></th>
+                    <th class="sortable" data-col="beta" data-type="num">Beta <span class="sort-arrow">↕</span></th>
+                  </tr>
+                </thead>
+                <tbody id="stats-tbody"></tbody>
+              </table>
+            </div>
+          </section>
+
+        </div>
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      Markowitz (1952) · Data: Yahoo Finance · Risk-free rate: 5% · 5,000 Monte Carlo portfolios
+    </footer>
+
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
