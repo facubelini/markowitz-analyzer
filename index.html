@@ -11,285 +11,279 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
-  <div class="app">
+<div class="app">
 
-    <header class="header">
-      <div class="header-content">
-        <div class="logo">
-          <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-            <path d="M3 25 L10 12 L17 18 L23 6" stroke="#00d4aa" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-            <circle cx="23" cy="6" r="3" fill="#00d4aa"/>
-            <circle cx="17" cy="18" r="2.5" fill="#ffd700"/>
-            <circle cx="10" cy="12" r="2.5" fill="#4ecdc4"/>
-            <circle cx="3" cy="25" r="2.5" fill="#ff6b6b"/>
-          </svg>
-          <h1>Analizador Markowitz</h1>
-        </div>
-        <div class="header-badge">Teoría Moderna de Portafolios · Monte Carlo</div>
+  <header class="header">
+    <div class="header-content">
+      <div class="logo">
+        <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+          <path d="M3 25 L10 12 L17 18 L23 6" stroke="#00d4aa" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="23" cy="6" r="3" fill="#00d4aa"/>
+          <circle cx="17" cy="18" r="2.5" fill="#ffd700"/>
+          <circle cx="10" cy="12" r="2.5" fill="#4ecdc4"/>
+          <circle cx="3" cy="25" r="2.5" fill="#ff6b6b"/>
+        </svg>
+        <h1>Analizador Markowitz</h1>
       </div>
-    </header>
+      <div class="header-badge">Teoría Moderna de Portafolios · Monte Carlo</div>
+    </div>
+  </header>
 
-    <main class="main">
+  <main class="main">
 
-      <!-- Tarjeta de configuración -->
-      <section class="card input-card">
-        <h2 class="section-title">Configurar Portafolio</h2>
+    <!-- Configuración -->
+    <section class="card input-card">
+      <h2 class="section-title">Configurar Portafolio</h2>
 
-        <div class="theory-intro">
-          <strong>¿De qué se trata?</strong>
-          Esta herramienta implementa la <em>Teoría Moderna de Portafolios</em> de Harry Markowitz (Premio Nobel 1990).
-          La idea central: combinando activos con distintas correlaciones podés reducir el riesgo total del portafolio
-          sin sacrificar retorno — el famoso efecto de <em>diversificación</em>.
+      <div class="theory-intro">
+        <strong>¿De qué se trata?</strong>
+        Esta herramienta implementa la <em>Teoría Moderna de Portafolios</em> de Harry Markowitz (Premio Nobel 1990).
+        La idea central: combinando activos con distintas correlaciones podés reducir el riesgo total del portafolio
+        sin sacrificar retorno — el efecto de <em>diversificación</em>.
+      </div>
+
+      <div class="input-row">
+        <input type="text" id="ticker-input" class="ticker-input"
+          placeholder="Ingresá tickers, ej: AAPL o AAPL, TSLA, NVDA"
+          maxlength="60" autocomplete="off" autocapitalize="characters" spellcheck="false">
+        <button id="add-ticker-btn" class="btn btn-secondary">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><path d="M7 0a7 7 0 100 14A7 7 0 007 0zm1 6V3a1 1 0 00-2 0v3H3a1 1 0 000 2h3v3a1 1 0 002 0V8h3a1 1 0 000-2H8z"/></svg>
+          Agregar
+        </button>
+      </div>
+      <p class="input-hint">Agregá de 2 a 10 tickers. Presioná Enter o usá comas para agregar varios a la vez.</p>
+
+      <div id="ticker-error" class="error-msg hidden"></div>
+
+      <div class="chips-container">
+        <div id="ticker-chips" class="ticker-chips"></div>
+      </div>
+
+      <!-- Selector de período -->
+      <div class="period-row">
+        <span class="period-label">Período histórico:</span>
+        <div class="period-sel" id="period-sel">
+          <button class="prd-btn" data-period="0.5">6m</button>
+          <button class="prd-btn" data-period="1">1a</button>
+          <button class="prd-btn active" data-period="2">2a</button>
+          <button class="prd-btn" data-period="3">3a</button>
+          <button class="prd-btn" data-period="5">5a</button>
         </div>
+        <span class="period-hint">Cambiar el período afecta todos los cálculos</span>
+      </div>
 
-        <div class="input-row">
-          <input
-            type="text"
-            id="ticker-input"
-            class="ticker-input"
-            placeholder="Ingresá tickers, ej: AAPL o AAPL, TSLA, NVDA"
-            maxlength="60"
-            autocomplete="off"
-            autocapitalize="characters"
-            spellcheck="false"
-          >
-          <button id="add-ticker-btn" class="btn btn-secondary">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
-              <path d="M7 0a7 7 0 100 14A7 7 0 007 0zm1 6V3a1 1 0 00-2 0v3H3a1 1 0 000 2h3v3a1 1 0 002 0V8h3a1 1 0 000-2H8z"/>
-            </svg>
-            Agregar
-          </button>
+      <div class="input-footer">
+        <div class="input-meta">
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="currentColor" opacity=".5"><circle cx="6.5" cy="6.5" r="6" stroke="currentColor" stroke-width="1" fill="none"/><path d="M6.5 4v3.5l2 1.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+          Yahoo Finance · Datos ajustados · Sin API key
         </div>
-        <p class="input-hint">Agregá de 2 a 10 tickers. Presioná Enter o usá comas para agregar varios a la vez.</p>
+        <button id="analyze-btn" class="btn btn-primary btn-large">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M2 13h12M4 10l3-5 2.5 3L12 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+          Analizar Portafolio
+        </button>
+      </div>
+    </section>
 
-        <div id="ticker-error" class="error-msg hidden"></div>
-
-        <div class="chips-container">
-          <div id="ticker-chips" class="ticker-chips"></div>
+    <!-- Estado de carga -->
+    <div id="loading-state" class="loading-section hidden">
+      <div class="loading-header">
+        <div class="spinner"></div>
+        <div>
+          <div class="loading-title">Obteniendo datos y ejecutando simulación…</div>
+          <div id="loading-status" class="loading-sub">Iniciando</div>
         </div>
+      </div>
+      <div id="ticker-status-list" class="ticker-status-list"></div>
+      <div class="skeleton-row">
+        <div class="skeleton"></div><div class="skeleton"></div><div class="skeleton skeleton--tall"></div>
+      </div>
+    </div>
 
-        <div class="input-footer">
-          <div class="input-meta">
-            <svg width="13" height="13" viewBox="0 0 13 13" fill="currentColor" opacity=".5"><circle cx="6.5" cy="6.5" r="6" stroke="currentColor" stroke-width="1" fill="none"/><path d="M6.5 4v3.5l2 1.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
-            Yahoo Finance · 2 años de datos diarios · Sin API key
+    <!-- Resultados -->
+    <div id="results" class="results hidden">
+
+      <div id="summary-bar" class="summary-bar"></div>
+
+      <!-- Fila 1: Frontera + Pesos -->
+      <div class="grid grid--60-40">
+
+        <section class="card">
+          <div class="card-header">
+            <h2>Frontera Eficiente</h2>
+            <div class="legend">
+              <span class="legend-item"><svg width="13" height="13" viewBox="0 0 13 13" fill="#00e87a"><polygon points="6.5,0 8.5,4.5 13,4.5 9.5,8 11,13 6.5,10 2,13 3.5,8 0,4.5 4.5,4.5"/></svg>Máx. Sharpe</span>
+              <span class="legend-item"><svg width="13" height="13" viewBox="0 0 13 13" fill="#ff8c00"><polygon points="6.5,0 13,13 0,13"/></svg>Mín. Varianza</span>
+              <span class="legend-item"><svg width="13" height="13" viewBox="0 0 13 13" fill="#4ecdc4"><polygon points="6.5,0 13,6.5 6.5,13 0,6.5"/></svg>S&P 500</span>
+              <span class="legend-item sharpe-grad-legend"><span class="grad-bar"></span>Sharpe</span>
+            </div>
           </div>
-          <button id="analyze-btn" class="btn btn-primary btn-large">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-              <path d="M2 13h12M4 10l3-5 2.5 3L12 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-            </svg>
-            Analizar Portafolio
-          </button>
+          <div class="chart-wrap chart-wrap--frontier">
+            <canvas id="frontier-chart"></canvas>
+          </div>
+          <details class="info-panel">
+            <summary>¿Qué es la Frontera Eficiente?</summary>
+            <div class="info-body">
+              <p>La <strong>Frontera Eficiente</strong> (Markowitz, 1952) es el conjunto de portafolios que ofrecen el <strong>mayor retorno posible para cada nivel de riesgo</strong>.</p>
+              <ul>
+                <li>📍 <strong>Cada punto</strong> = un portafolio con pesos aleatorios distintos</li>
+                <li>🎨 <strong>Color</strong> = Ratio de Sharpe (azul bajo → amarillo alto)</li>
+                <li>★ <strong>Estrella verde</strong> = Portafolio de Máximo Sharpe</li>
+                <li>▲ <strong>Triángulo naranja</strong> = Portafolio de Mínima Varianza</li>
+                <li>◆ <strong>Diamante celeste</strong> = S&P 500 (SPY) como referencia</li>
+              </ul>
+              <p>Si tu portafolio óptimo está <strong>arriba y a la izquierda</strong> del SPY, supera al mercado en retorno ajustado por riesgo.</p>
+            </div>
+          </details>
+        </section>
+
+        <section class="card">
+          <div class="card-header"><h2>Pesos del Portafolio</h2></div>
+          <div class="tab-bar">
+            <button class="tab-btn active" data-tab="max-sharpe">Máx. Sharpe</button>
+            <button class="tab-btn" data-tab="min-var">Mín. Varianza</button>
+            <button class="tab-btn" data-tab="equal">Pesos Iguales</button>
+          </div>
+
+          <div id="tab-max-sharpe" class="tab-panel active">
+            <div id="metrics-max-sharpe" class="metrics-row"></div>
+            <div class="chart-wrap chart-wrap--weights"><canvas id="wc-max-sharpe"></canvas></div>
+            <div id="contrib-max-sharpe" class="contrib-wrap"></div>
+          </div>
+          <div id="tab-min-var" class="tab-panel">
+            <div id="metrics-min-var" class="metrics-row"></div>
+            <div class="chart-wrap chart-wrap--weights"><canvas id="wc-min-var"></canvas></div>
+            <div id="contrib-min-var" class="contrib-wrap"></div>
+          </div>
+          <div id="tab-equal" class="tab-panel">
+            <div id="metrics-equal" class="metrics-row"></div>
+            <div class="chart-wrap chart-wrap--weights"><canvas id="wc-equal"></canvas></div>
+            <div id="contrib-equal" class="contrib-wrap"></div>
+          </div>
+
+          <details class="info-panel">
+            <summary>¿Cómo elegir entre los tres portafolios?</summary>
+            <div class="info-body">
+              <ul>
+                <li><strong>Máximo Sharpe:</strong> mejor retorno ajustado por riesgo. Recomendado para la mayoría de los inversores. Puede estar muy concentrado en pocos activos.</li>
+                <li><strong>Mínima Varianza:</strong> mínimas fluctuaciones del capital. Para perfiles conservadores o como ancla de un portafolio más amplio.</li>
+                <li><strong>Pesos Iguales:</strong> benchmark simple. Útil para comparar si la optimización realmente agrega valor.</li>
+              </ul>
+              <p>La <strong>Contribución al riesgo</strong> muestra qué activos concentran más riesgo en cada portafolio — aunque dos activos tengan el mismo peso, pueden contribuir distinto al riesgo si tienen distinta volatilidad o correlación.</p>
+              <div class="formula">MRC_i = w_i · (C·w)_i / σ²_p</div>
+            </div>
+          </details>
+        </section>
+
+      </div>
+
+      <!-- Fila 2: Precios normalizados (ancho completo) -->
+      <section class="card" style="margin-bottom:18px">
+        <div class="card-header">
+          <h2>Evolución de Precios Normalizados</h2>
+          <span class="chart-subtitle">Base 100 al inicio del período</span>
         </div>
+        <div class="chart-wrap" style="height:280px">
+          <canvas id="prices-chart"></canvas>
+        </div>
+        <details class="info-panel">
+          <summary>¿Para qué sirve este gráfico?</summary>
+          <div class="info-body">
+            <p>Normalizar todos los activos a 100 al inicio del período permite <strong>comparar su desempeño relativo</strong> en la misma escala, sin importar su precio absoluto.</p>
+            <ul>
+              <li>Activos que convergen visualmente tienen <strong>alta correlación</strong> → poca diversificación entre sí</li>
+              <li>Activos que se mueven en direcciones distintas tienen <strong>baja o negativa correlación</strong> → más diversificación</li>
+              <li>Las caídas bruscas reflejan los <strong>drawdowns</strong> que aparecen en la tabla inferior</li>
+            </ul>
+            <p>Tip: si dos líneas son casi idénticas, probablemente no valga la pena tener ambos activos — uno es redundante.</p>
+          </div>
+        </details>
       </section>
 
-      <!-- Estado de carga -->
-      <div id="loading-state" class="loading-section hidden">
-        <div class="loading-header">
-          <div class="spinner"></div>
-          <div>
-            <div class="loading-title">Obteniendo datos y ejecutando simulación…</div>
-            <div id="loading-status" class="loading-sub">Iniciando</div>
+      <!-- Fila 3: Correlación + Tabla -->
+      <div class="grid grid--50-50">
+
+        <section class="card">
+          <div class="card-header">
+            <h2>Matriz de Correlación</h2>
+            <div class="corr-scale">
+              <span class="corr-scale-label">−1</span>
+              <span class="corr-scale-bar"></span>
+              <span class="corr-scale-label">+1</span>
+            </div>
           </div>
-        </div>
-        <div id="ticker-status-list" class="ticker-status-list"></div>
-        <div class="skeleton-row">
-          <div class="skeleton"></div>
-          <div class="skeleton"></div>
-          <div class="skeleton skeleton--tall"></div>
-        </div>
-      </div>
-
-      <!-- Resultados -->
-      <div id="results" class="results hidden">
-
-        <div id="summary-bar" class="summary-bar"></div>
-
-        <!-- Fila 1: Frontera Eficiente + Pesos -->
-        <div class="grid grid--60-40">
-
-          <section class="card">
-            <div class="card-header">
-              <h2>Frontera Eficiente</h2>
-              <div class="legend">
-                <span class="legend-item">
-                  <svg width="13" height="13" viewBox="0 0 13 13" fill="#00e87a"><polygon points="6.5,0 8.5,4.5 13,4.5 9.5,8 11,13 6.5,10 2,13 3.5,8 0,4.5 4.5,4.5"/></svg>
-                  Máximo Sharpe
-                </span>
-                <span class="legend-item">
-                  <svg width="13" height="13" viewBox="0 0 13 13" fill="#ff8c00"><polygon points="6.5,0 13,13 0,13"/></svg>
-                  Mínima Varianza
-                </span>
-                <span class="legend-item sharpe-grad-legend">
-                  <span class="grad-bar"></span>
-                  Sharpe
-                </span>
-              </div>
+          <div id="corr-matrix" class="corr-matrix"></div>
+          <details class="info-panel">
+            <summary>¿Por qué importa la correlación?</summary>
+            <div class="info-body">
+              <p>La correlación mide cómo se mueven dos activos entre sí:</p>
+              <ul>
+                <li><strong>+1.0</strong> → Se mueven exactamente igual (sin diversificación)</li>
+                <li><strong>0.0</strong> → Independientes</li>
+                <li><strong>−1.0</strong> → Opuestos (máxima diversificación)</li>
+              </ul>
+              <p>La <strong>clave de Markowitz</strong>: mezclar activos con baja correlación reduce el riesgo total sin sacrificar retorno. Si todo sube y baja junto, no hay diversificación real.</p>
+              <div class="formula">ρ(A,B) = Cov(A,B) / (σ_A × σ_B)</div>
             </div>
-            <div class="chart-wrap chart-wrap--frontier">
-              <canvas id="frontier-chart"></canvas>
+          </details>
+        </section>
+
+        <section class="card">
+          <div class="card-header">
+            <h2>Estadísticas de Activos</h2>
+            <span class="table-hint">Clic en encabezados para ordenar</span>
+          </div>
+          <div class="table-scroll">
+            <table class="stats-table" id="stats-table">
+              <thead><tr>
+                <th class="sortable" data-col="ticker" data-type="str">Ticker <span class="sort-arrow">↕</span></th>
+                <th class="sortable" data-col="annReturn" data-type="num">
+                  <span class="tip" data-tip="exp(μ_log × 252) − 1. Retorno anual compuesto simple. Siempre mayor a −100%.">Retorno Anual</span> <span class="sort-arrow">↕</span>
+                </th>
+                <th class="sortable" data-col="annVol" data-type="num">
+                  <span class="tip" data-tip="Desviación estándar de retornos diarios × √252. Medida estándar de riesgo en finanzas.">Volatilidad Anual</span> <span class="sort-arrow">↕</span>
+                </th>
+                <th class="sortable" data-col="sharpe" data-type="num">
+                  <span class="tip" data-tip="(Retorno − 5%) / Volatilidad. Retorno por unidad de riesgo. >1 bueno, >2 excelente.">Ratio de Sharpe</span> <span class="sort-arrow">↕</span>
+                </th>
+                <th class="sortable" data-col="maxDD" data-type="num">
+                  <span class="tip" data-tip="Mayor caída desde un pico hasta un valle en el período. Ej: −40% significa que el activo perdió 40% desde su máximo en algún momento.">Drawdown Máx.</span> <span class="sort-arrow">↕</span>
+                </th>
+                <th class="sortable" data-col="beta" data-type="num">
+                  <span class="tip" data-tip="Sensibilidad vs S&P 500 (SPY). Beta>1 = más volátil que el mercado. Beta<1 = más estable. Calculado de forma independiente para cada activo.">Beta (vs SPY)</span> <span class="sort-arrow">↕</span>
+                </th>
+              </tr></thead>
+              <tbody id="stats-tbody"></tbody>
+            </table>
+          </div>
+          <details class="info-panel">
+            <summary>¿Qué significa cada métrica?</summary>
+            <div class="info-body">
+              <ul>
+                <li><strong>Retorno Anual:</strong> retorno compuesto anual (CAGR).
+                  <div class="formula">μ = exp( promedio(ln Pₜ/Pₜ₋₁) × 252 ) − 1</div></li>
+                <li><strong>Volatilidad Anual:</strong> riesgo del activo.
+                  <div class="formula">σ = desv.est.(retornos diarios) × √252</div></li>
+                <li><strong>Ratio de Sharpe:</strong> retorno ajustado por riesgo (tasa libre de riesgo = 5%).
+                  <div class="formula">S = (μ − 5%) / σ &nbsp;·&nbsp; S>1 es bueno</div></li>
+                <li><strong>Drawdown Máx.:</strong> mayor caída desde un pico histórico.
+                  <div class="formula">DD = max_t( (pico_t − precio_t) / pico_t )</div></li>
+                <li><strong>Beta (vs SPY):</strong> sensibilidad respecto al S&P 500. Calculado de forma independiente — no cambia al agregar otros tickers.
+                  <div class="formula">β = Cov(r_activo, r_SPY) / Var(r_SPY)</div>
+                  <span style="font-size:12px;color:var(--text-3)">Si SPY no está disponible (CORS), se muestra —</span></li>
+              </ul>
             </div>
-
-            <details class="info-panel">
-              <summary>¿Qué es la Frontera Eficiente?</summary>
-              <div class="info-body">
-                <p>La <strong>Frontera Eficiente</strong> (Markowitz, 1952) es el conjunto de portafolios que ofrecen el <strong>mayor retorno posible para cada nivel de riesgo</strong>, o el menor riesgo para cada nivel de retorno.</p>
-                <ul>
-                  <li>📍 <strong>Cada punto</strong> = un portafolio con pesos aleatorios distintos</li>
-                  <li>🎨 <strong>Color</strong> = Ratio de Sharpe (azul bajo → amarillo alto)</li>
-                  <li>★ <strong>Estrella verde</strong> = Portafolio de Máximo Sharpe (óptimo para la mayoría)</li>
-                  <li>▲ <strong>Triángulo naranja</strong> = Portafolio de Mínima Varianza (más conservador)</li>
-                </ul>
-                <p>Todo portafolio por debajo y a la derecha de la frontera es <strong>ineficiente</strong>: existe otro con mejor retorno o menor riesgo con los mismos activos.</p>
-              </div>
-            </details>
-          </section>
-
-          <section class="card">
-            <div class="card-header">
-              <h2>Pesos del Portafolio</h2>
-            </div>
-            <div class="tab-bar">
-              <button class="tab-btn active" data-tab="max-sharpe">Máx. Sharpe</button>
-              <button class="tab-btn" data-tab="min-var">Mín. Varianza</button>
-              <button class="tab-btn" data-tab="equal">Pesos Iguales</button>
-            </div>
-            <div id="tab-max-sharpe" class="tab-panel active">
-              <div id="metrics-max-sharpe" class="metrics-row"></div>
-              <div class="chart-wrap chart-wrap--weights"><canvas id="wc-max-sharpe"></canvas></div>
-            </div>
-            <div id="tab-min-var" class="tab-panel">
-              <div id="metrics-min-var" class="metrics-row"></div>
-              <div class="chart-wrap chart-wrap--weights"><canvas id="wc-min-var"></canvas></div>
-            </div>
-            <div id="tab-equal" class="tab-panel">
-              <div id="metrics-equal" class="metrics-row"></div>
-              <div class="chart-wrap chart-wrap--weights"><canvas id="wc-equal"></canvas></div>
-            </div>
-
-            <details class="info-panel">
-              <summary>¿Cómo se calculan los pesos óptimos?</summary>
-              <div class="info-body">
-                <p>Se generan <strong>5.000 portafolios aleatorios</strong> (Monte Carlo) con distintas proporciones de cada activo (pesos que suman 100%). Para cada uno se calculan retorno, volatilidad y Sharpe.</p>
-                <ul>
-                  <li>
-                    <strong>Máximo Sharpe:</strong> el portafolio con mejor retorno ajustado por riesgo.
-                    Es el "óptimo" de Markowitz para un inversor que busca eficiencia.
-                  </li>
-                  <li>
-                    <strong>Mínima Varianza:</strong> el portafolio más estable. Minimiza las fluctuaciones del capital.
-                    Ideal para perfiles conservadores.
-                  </li>
-                  <li>
-                    <strong>Pesos Iguales:</strong> asigna la misma proporción a cada activo.
-                    Sirve como benchmark de comparación.
-                  </li>
-                </ul>
-                <div class="formula">Peso<sub>i</sub> ≥ 0 &nbsp;·&nbsp; Σ Peso<sub>i</sub> = 1 &nbsp;·&nbsp; Pesos generados con distribución Dirichlet</div>
-              </div>
-            </details>
-          </section>
-
-        </div>
-
-        <!-- Fila 2: Correlación + Tabla -->
-        <div class="grid grid--50-50">
-
-          <section class="card">
-            <div class="card-header">
-              <h2>Matriz de Correlación</h2>
-              <div class="corr-scale">
-                <span class="corr-scale-label">−1</span>
-                <span class="corr-scale-bar"></span>
-                <span class="corr-scale-label">+1</span>
-              </div>
-            </div>
-            <div id="corr-matrix" class="corr-matrix"></div>
-
-            <details class="info-panel">
-              <summary>¿Por qué importa la correlación?</summary>
-              <div class="info-body">
-                <p>La correlación mide cómo se mueven dos activos en relación entre sí:</p>
-                <ul>
-                  <li><strong>+1.0</strong> → Se mueven exactamente igual (no diversifica)</li>
-                  <li><strong>0.0</strong> → Movimientos independientes</li>
-                  <li><strong>−1.0</strong> → Se mueven en sentido opuesto (máxima diversificación)</li>
-                </ul>
-                <p><strong>La clave de Markowitz:</strong> mezclar activos con baja correlación reduce el riesgo total <em>sin sacrificar retorno</em>. Si todos los activos suben y bajan juntos, no hay diversificación real.</p>
-                <div class="formula">ρ(A, B) = Cov(A, B) / (σ<sub>A</sub> × σ<sub>B</sub>)</div>
-              </div>
-            </details>
-          </section>
-
-          <section class="card">
-            <div class="card-header">
-              <h2>Estadísticas de Activos</h2>
-              <span class="table-hint">Clic en encabezados para ordenar</span>
-            </div>
-            <div class="table-scroll">
-              <table class="stats-table" id="stats-table">
-                <thead>
-                  <tr>
-                    <th class="sortable" data-col="ticker" data-type="str">
-                      Ticker <span class="sort-arrow">↕</span>
-                    </th>
-                    <th class="sortable" data-col="annReturn" data-type="num">
-                      <span class="tip" data-tip="Retorno anual compuesto simple: exp(μ_log × 252) − 1. Siempre mayor a −100%. Equivale a la rentabilidad total del activo en el año.">Retorno Anual</span>
-                      <span class="sort-arrow">↕</span>
-                    </th>
-                    <th class="sortable" data-col="annVol" data-type="num">
-                      <span class="tip" data-tip="Desviación estándar de retornos diarios × √252. Es la medida de riesgo más usada en finanzas.">Volatilidad Anual</span>
-                      <span class="sort-arrow">↕</span>
-                    </th>
-                    <th class="sortable" data-col="sharpe" data-type="num">
-                      <span class="tip" data-tip="(Retorno − Tasa libre de riesgo 5%) / Volatilidad. Un Sharpe mayor a 1 indica buen retorno por unidad de riesgo.">Ratio de Sharpe</span>
-                      <span class="sort-arrow">↕</span>
-                    </th>
-                    <th class="sortable" data-col="beta" data-type="num">
-                      <span class="tip" data-tip="Beta de mercado respecto al S&P 500 (ETF SPY). Es una propiedad fija del activo — no cambia según qué otros tickers tengas en el portafolio. Beta &gt; 1 = más volátil que el mercado; Beta &lt; 1 = más estable.">Beta (vs SPY)</span>
-                      <span class="sort-arrow">↕</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody id="stats-tbody"></tbody>
-              </table>
-            </div>
-
-            <details class="info-panel">
-              <summary>¿Qué significa cada métrica?</summary>
-              <div class="info-body">
-                <ul>
-                  <li>
-                    <strong>Retorno Anual:</strong> retorno anual compuesto simple, convertido desde los retornos logarítmicos diarios.
-                    <div class="formula">μ = exp( promedio(ln(Pₜ/Pₜ₋₁)) × 252 ) − 1</div>
-                    <span style="font-size:12px;color:var(--text-3)">Siempre &gt; −100%. Usar solo μ_log × 252 daría valores como −164% que son imposibles como retorno simple.</span>
-                  </li>
-                  <li>
-                    <strong>Volatilidad Anual:</strong> desviación estándar anualizada.
-                    <div class="formula">σ = desv.est.(retornos diarios) × √252</div>
-                  </li>
-                  <li>
-                    <strong>Ratio de Sharpe:</strong> retorno ajustado por riesgo (tasa libre de riesgo = 5%).
-                    <div class="formula">S = (μ − r<sub>f</sub>) / σ &nbsp;·&nbsp; S > 1 es considerado bueno</div>
-                  </li>
-                  <li>
-                    <strong>Beta (vs SPY):</strong> mide cuánto se mueve el activo en relación al S&P 500. Es descargado automáticamente (ETF SPY) y es <em>independiente de qué otros tickers tengas</em>. Valores típicos: AAPL ≈ 1.2, MSFT ≈ 0.9, TSLA ≈ 1.8, utilities ≈ 0.5.
-                    <div class="formula">β = Cov(r<sub>activo</sub>, r<sub>SPY</sub>) / Var(r<sub>SPY</sub>)</div>
-                  </li>
-                </ul>
-              </div>
-            </details>
-          </section>
-
-        </div>
+          </details>
+        </section>
 
       </div>
-    </main>
+    </div>
+  </main>
 
-    <footer class="footer">
-      Markowitz (1952) · Datos: Yahoo Finance · Tasa libre de riesgo: 5% · 5.000 portafolios Monte Carlo
-    </footer>
+  <footer class="footer">
+    Markowitz (1952) · Datos: Yahoo Finance · Tasa libre de riesgo: 5% · 5.000 portafolios Monte Carlo
+  </footer>
 
-  </div>
-  <script src="app.js"></script>
+</div>
+<script src="app.js"></script>
 </body>
 </html>

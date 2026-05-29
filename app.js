@@ -1,10 +1,10 @@
 'use strict';
 
 // ─── Constantes ───────────────────────────────────────────────
-const RF     = 0.05;   // tasa libre de riesgo (5 %)
-const DAYS   = 252;    // días hábiles / año
-const N_SIM  = 5000;   // portafolios Monte Carlo
-const YEARS  = 2;      // ventana histórica
+const RF    = 0.05;
+const DAYS  = 252;
+const N_SIM = 5000;
+const PERIOD_LABELS = { 0.5:'6 meses', 1:'1 año', 2:'2 años', 3:'3 años', 5:'5 años' };
 
 const COLORS = [
   '#00d4aa','#ff6b6b','#4ecdc4','#45b7d1',
@@ -13,9 +13,10 @@ const COLORS = [
 ];
 
 // ─── Estado global ────────────────────────────────────────────
-let tickers  = ['AAPL','MSFT','GOOGL','AMZN'];
-let results  = null;
-const charts = {};
+let tickers     = ['AAPL','MSFT','GOOGL','AMZN'];
+let periodYears = 2;
+let results     = null;
+const charts    = {};
 
 // ─── Utilidades ───────────────────────────────────────────────
 const lerp   = (a, b, t) => a + (b - a) * t;
@@ -24,7 +25,6 @@ const fmtPct = (v, d = 1) => (v * 100).toFixed(d) + '%';
 const fmtN   = (v, d = 2) => v.toFixed(d);
 const isValidTicker = t => /^[A-Z0-9]{1,5}(\.[A-Z]{1,2})?$/.test(t);
 
-// Convierte un Ratio de Sharpe normalizado [0,1] en un color azul→teal→dorado
 function sharpeColor(t) {
   t = clamp(t, 0, 1);
   if (t < 0.5) {
@@ -35,7 +35,6 @@ function sharpeColor(t) {
   return `rgba(${Math.round(lerp(0,255,s))},${Math.round(lerp(212,210,s))},${Math.round(lerp(170,0,s))},0.75)`;
 }
 
-// Convierte correlación [-1,1] en color rojo→oscuro→teal
 function corrColor(r) {
   r = clamp(r, -1, 1);
   if (r >= 0)
@@ -53,36 +52,29 @@ async function getJSON(url) {
 
 async function fetchPrices(ticker) {
   const now   = Math.floor(Date.now() / 1000);
-  const start = now - YEARS * 365 * 24 * 3600;
+  const start = now - Math.ceil(periodYears * 366 * 24 * 3600);
   const base  = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&period1=${start}&period2=${now}&events=div,splits&includeAdjustedClose=true`;
 
   let data;
-  try {
-    data = await getJSON(base);
-  } catch (_) {
-    // Fallback con proxy CORS
-    data = await getJSON(`https://corsproxy.io/?${encodeURIComponent(base)}`);
-  }
+  try { data = await getJSON(base); }
+  catch (_) { data = await getJSON(`https://corsproxy.io/?${encodeURIComponent(base)}`); }
 
   if (data?.chart?.error) throw new Error(data.chart.error.description || 'No encontrado');
-
   const res = data?.chart?.result?.[0];
   if (!res) throw new Error('Sin datos');
 
   const ts     = res.timestamp || [];
   const prices = res.indicators?.adjclose?.[0]?.adjclose
-               || res.indicators?.quote?.[0]?.close
-               || [];
+               || res.indicators?.quote?.[0]?.close || [];
 
-  const valid = ts
-    .map((t, i) => ({ t, p: prices[i] }))
-    .filter(x => x.p != null && x.p > 0);
-
-  if (valid.length < 50) throw new Error('Datos insuficientes');
+  const valid = ts.map((t, i) => ({ t, p: prices[i] })).filter(x => x.p != null && x.p > 0);
+  const minNeeded = Math.max(30, Math.round(periodYears * 252 * 0.5));
+  if (valid.length < minNeeded) throw new Error(`Datos insuficientes (${valid.length} días)`);
   return { ts: valid.map(x => x.t), prices: valid.map(x => x.p) };
 }
 
-// Alinea todas las series a fechas comunes
+// Alinea todas las series a fechas comunes.
+// Devuelve { prices: {ticker: []}, timestamps: [] }
 function alignSeries(dataMap) {
   const keys = Object.keys(dataMap);
   const sets  = keys.map(k => new Set(dataMap[k].ts.map(String)));
@@ -91,12 +83,12 @@ function alignSeries(dataMap) {
   for (let i = 1; i < sets.length; i++) common = common.filter(v => sets[i].has(v));
   common = common.map(Number).sort((a, b) => a - b);
 
-  const out = {};
+  const prices = {};
   for (const k of keys) {
     const idx = new Map(dataMap[k].ts.map((t, i) => [String(t), i]));
-    out[k] = common.map(t => dataMap[k].prices[idx.get(String(t))]);
+    prices[k] = common.map(t => dataMap[k].prices[idx.get(String(t))]);
   }
-  return out;
+  return { prices, timestamps: common };
 }
 
 // ─── Matemática financiera ────────────────────────────────────
@@ -152,14 +144,14 @@ function portVar(w, C) {
 // Retorno esperado del portafolio: Σ wᵢ · μᵢ
 function portRet(w, mu) { return w.reduce((s, wi, i) => s + wi * mu[i], 0); }
 
-// Pesos aleatorios con distribución Dirichlet (via exponenciales)
+// Pesos aleatorios con distribución Dirichlet
 function randWeights(n) {
   const u = Array.from({length: n}, () => -Math.log(Math.random() + 1e-10));
   const s = u.reduce((a, b) => a + b, 0);
   return u.map(x => x / s);
 }
 
-// Simulación Monte Carlo: genera N portafolios aleatorios
+// Simulación Monte Carlo
 function monteCarlo(mu, C, n) {
   const portfolios = [];
   for (let k = 0; k < n; k++) {
@@ -171,22 +163,40 @@ function monteCarlo(mu, C, n) {
   return portfolios;
 }
 
-// Beta de cada activo vs SPY calculado de forma INDEPENDIENTE (alineación pairwise).
-// Cada ticker se alinea solo con SPY, sin involucrar a los demás tickers.
-// Así el beta de AAPL es siempre el mismo sin importar qué otros tickers haya.
-// Retorna null para cada activo si SPY no está disponible.
+// Beta pairwise vs SPY (independiente de la composición del portafolio)
 function computeBetas(rawMap, tickerList, spyRaw) {
   if (!spyRaw) return tickerList.map(() => null);
   return tickerList.map(t => {
     try {
-      // Alineación solo entre este activo y SPY
-      const pair     = alignSeries({ asset: rawMap[t], spy: spyRaw });
+      const { prices: pair } = alignSeries({ asset: rawMap[t], spy: spyRaw });
       const assetRet = logReturns(pair.asset);
       const spyRet   = logReturns(pair.spy);
       const mktVar   = cov(spyRet, spyRet);
       if (mktVar === 0 || assetRet.length < 30) return null;
       return cov(assetRet, spyRet) / mktVar;
     } catch (_) { return null; }
+  });
+}
+
+// Drawdown máximo: mayor caída pico→valle en el período (retorna decimal positivo)
+function computeMaxDrawdown(prices) {
+  let peak = prices[0], maxDD = 0;
+  for (let i = 1; i < prices.length; i++) {
+    if (prices[i] > peak) peak = prices[i];
+    const dd = (peak - prices[i]) / peak;
+    if (dd > maxDD) maxDD = dd;
+  }
+  return maxDD;
+}
+
+// Contribución marginal al riesgo (suma = 1)
+// MRC_i = w_i · (C·w)_i / portVar
+function computeRiskContrib(w, C) {
+  const pv = portVar(w, C);
+  if (pv <= 0) return w.map(() => 1 / w.length);
+  return w.map((wi, i) => {
+    const Cwi = C[i].reduce((s, cij, j) => s + cij * w[j], 0);
+    return wi * Cwi / pv;
   });
 }
 
@@ -226,7 +236,7 @@ function showInputErr(msg) {
   const el = document.getElementById('ticker-error');
   el.textContent = msg;
   el.classList.remove('hidden');
-  setTimeout(() => el.classList.add('hidden'), 4000);
+  setTimeout(() => el.classList.add('hidden'), 4500);
 }
 
 // ─── UI de carga ──────────────────────────────────────────────
@@ -236,8 +246,7 @@ function showLoading() {
   document.getElementById('analyze-btn').disabled = true;
   document.getElementById('ticker-status-list').innerHTML = tickers.map(t => `
     <div class="ts-item" id="ts-${t}">
-      <span class="ts-dot"></span>
-      <span>${t}</span>
+      <span class="ts-dot"></span><span>${t}</span>
       <span class="ts-msg" style="color:var(--text-3);font-size:11px">esperando…</span>
     </div>`).join('');
 }
@@ -249,10 +258,7 @@ function setTS(ticker, state, msg) {
   el.querySelector('.ts-msg').textContent = msg;
 }
 
-function setStatus(msg) {
-  const el = document.getElementById('loading-status');
-  if (el) el.textContent = msg;
-}
+function setStatus(msg) { const el = document.getElementById('loading-status'); if (el) el.textContent = msg; }
 
 function hideLoading() {
   document.getElementById('loading-state').classList.add('hidden');
@@ -262,272 +268,245 @@ function hideLoading() {
 // ─── Gráficos ─────────────────────────────────────────────────
 function destroyChart(id) { if (charts[id]) { charts[id].destroy(); delete charts[id]; } }
 
-function renderFrontier(portfolios, maxS, minV) {
+// Frontera eficiente
+function renderFrontier(portfolios, maxS, minV, spyStats) {
   destroyChart('frontier');
   const sharpes = portfolios.map(p => p.sharpe);
   const lo = Math.min(...sharpes), hi = Math.max(...sharpes);
 
-  const dots = portfolios.map(p => ({
-    x: p.vol * 100, y: p.ret * 100,
-    _w: p.w, _s: p.sharpe
-  }));
-  const cols = portfolios.map(p => sharpeColor((p.sharpe - lo) / (hi - lo || 1)));
-
-  charts['frontier'] = new Chart(
-    document.getElementById('frontier-chart').getContext('2d'),
+  const datasets = [
     {
-      type: 'scatter',
-      data: {
-        datasets: [
-          {
-            label: 'Portafolios',
-            data: dots,
-            backgroundColor: cols,
-            pointRadius: 3.5,
-            pointHoverRadius: 5,
-            order: 3
-          },
-          {
-            label: 'Máximo Sharpe',
-            data: [{ x: maxS.vol * 100, y: maxS.ret * 100, _w: maxS.w, _s: maxS.sharpe }],
-            backgroundColor: '#00e87a',
-            borderColor: '#fff',
-            borderWidth: 1.5,
-            pointStyle: 'star',
-            pointRadius: 13,
-            pointHoverRadius: 17,
-            order: 1
-          },
-          {
-            label: 'Mínima Varianza',
-            data: [{ x: minV.vol * 100, y: minV.ret * 100, _w: minV.w, _s: minV.sharpe }],
-            backgroundColor: '#ff8c00',
-            borderColor: '#fff',
-            borderWidth: 1.5,
-            pointStyle: 'triangle',
-            pointRadius: 11,
-            pointHoverRadius: 15,
-            order: 2
-          }
-        ]
-      },
-      options: {
-        animation: false,
-        responsive: true,
-        maintainAspectRatio: false,
-        interaction: { mode: 'nearest', intersect: true },
-        plugins: {
-          legend: { display: false },
-          tooltip: {
-            backgroundColor: '#1a1d27',
-            borderColor: '#272b3d',
-            borderWidth: 1,
-            titleColor: '#dde3ef',
-            bodyColor: '#8892a4',
-            padding: 12,
-            callbacks: {
-              title: items => {
-                const lbl = items[0].dataset.label;
-                return lbl === 'Máximo Sharpe'   ? '★ Portafolio de Máximo Sharpe'
-                     : lbl === 'Mínima Varianza' ? '▲ Portafolio de Mínima Varianza'
-                     : 'Portafolio Simulado';
-              },
-              label: item => {
-                const d = item.raw;
-                return [
-                  ` Retorno:      ${fmtPct(d.y / 100)}`,
-                  ` Volatilidad:  ${fmtPct(d.x / 100)}`,
-                  ` Ratio Sharpe: ${fmtN(d._s)}`,
-                  ' ─────────────────────',
-                  ...tickers.map((t, i) => ` ${t.padEnd(6)} ${fmtPct(d._w[i])}`)
-                ];
-              }
+      label: 'Portafolios',
+      data: portfolios.map(p => ({ x: p.vol*100, y: p.ret*100, _w: p.w, _s: p.sharpe })),
+      backgroundColor: portfolios.map(p => sharpeColor((p.sharpe - lo) / (hi - lo || 1))),
+      pointRadius: 3.5, pointHoverRadius: 5, order: 4
+    },
+    {
+      label: 'Máximo Sharpe',
+      data: [{ x: maxS.vol*100, y: maxS.ret*100, _w: maxS.w, _s: maxS.sharpe }],
+      backgroundColor: '#00e87a', borderColor: '#fff', borderWidth: 1.5,
+      pointStyle: 'star', pointRadius: 13, pointHoverRadius: 17, order: 1
+    },
+    {
+      label: 'Mínima Varianza',
+      data: [{ x: minV.vol*100, y: minV.ret*100, _w: minV.w, _s: minV.sharpe }],
+      backgroundColor: '#ff8c00', borderColor: '#fff', borderWidth: 1.5,
+      pointStyle: 'triangle', pointRadius: 11, pointHoverRadius: 15, order: 2
+    }
+  ];
+
+  if (spyStats) datasets.push({
+    label: 'S&P 500 (SPY)',
+    data: [{ x: spyStats.vol*100, y: spyStats.ret*100, _w: null, _s: spyStats.sharpe }],
+    backgroundColor: '#4ecdc4', borderColor: '#fff', borderWidth: 1.5,
+    pointStyle: 'rectRot', pointRadius: 11, pointHoverRadius: 14, order: 3
+  });
+
+  charts['frontier'] = new Chart(document.getElementById('frontier-chart').getContext('2d'), {
+    type: 'scatter',
+    data: { datasets },
+    options: {
+      animation: false, responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'nearest', intersect: true },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1a1d27', borderColor: '#272b3d', borderWidth: 1,
+          titleColor: '#dde3ef', bodyColor: '#8892a4', padding: 12,
+          callbacks: {
+            title: items => {
+              const lbl = items[0].dataset.label;
+              return lbl === 'Máximo Sharpe'  ? '★ Portafolio de Máximo Sharpe'
+                   : lbl === 'Mínima Varianza'? '▲ Portafolio de Mínima Varianza'
+                   : lbl === 'S&P 500 (SPY)'  ? '◆ Benchmark: S&P 500 (SPY)'
+                   : 'Portafolio Simulado';
+            },
+            label: item => {
+              const d = item.raw;
+              const lines = [
+                ` Retorno:      ${fmtPct(d.y/100)}`,
+                ` Volatilidad:  ${fmtPct(d.x/100)}`,
+                ` Ratio Sharpe: ${fmtN(d._s)}`
+              ];
+              if (d._w) { lines.push(' ─────────────────────'); tickers.forEach((t,i) => lines.push(` ${t.padEnd(6)} ${fmtPct(d._w[i])}`)); }
+              return lines;
             }
           }
+        }
+      },
+      scales: {
+        x: {
+          title: { display: true, text: 'Volatilidad Anualizada (%)', color: '#525d72', font: { family:"'Inter'", size:11 } },
+          ticks: { color:'#525d72', font:{ family:"'JetBrains Mono'", size:10 }, callback: v => v.toFixed(0)+'%' },
+          grid: { color: 'rgba(39,43,61,.6)' }
         },
-        scales: {
-          x: {
-            title: { display: true, text: 'Volatilidad Anualizada (%)', color: '#525d72', font: { family: "'Inter'", size: 11 } },
-            ticks: { color: '#525d72', font: { family: "'JetBrains Mono'", size: 10 }, callback: v => v.toFixed(0) + '%' },
-            grid: { color: 'rgba(39,43,61,.6)' }
-          },
-          y: {
-            title: { display: true, text: 'Retorno Anualizado (%)', color: '#525d72', font: { family: "'Inter'", size: 11 } },
-            ticks: { color: '#525d72', font: { family: "'JetBrains Mono'", size: 10 }, callback: v => v.toFixed(0) + '%' },
-            grid: { color: 'rgba(39,43,61,.6)' }
-          }
+        y: {
+          title: { display: true, text: 'Retorno Anualizado (%)', color: '#525d72', font: { family:"'Inter'", size:11 } },
+          ticks: { color:'#525d72', font:{ family:"'JetBrains Mono'", size:10 }, callback: v => v.toFixed(0)+'%' },
+          grid: { color: 'rgba(39,43,61,.6)' }
         }
       }
     }
-  );
+  });
 }
 
-// Gráfico de barras horizontales para pesos del portafolio
+// Evolución de precios normalizados (base 100)
+function renderNormalizedPrices(aligned, tkrs, timestamps) {
+  destroyChart('prices');
+  const labels = timestamps.map(ts => {
+    const d = new Date(ts * 1000);
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  });
+
+  charts['prices'] = new Chart(document.getElementById('prices-chart').getContext('2d'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: tkrs.map((t, i) => {
+        const base = aligned[t][0];
+        return {
+          label: t,
+          data: aligned[t].map(p => parseFloat(((p / base) * 100).toFixed(2))),
+          borderColor: COLORS[i % COLORS.length],
+          backgroundColor: 'transparent',
+          borderWidth: 1.8, pointRadius: 0, pointHoverRadius: 4, tension: 0.1
+        };
+      })
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: true, position: 'top', labels: { color:'#8892a4', font:{ family:"'JetBrains Mono'", size:11 }, boxWidth:24, padding:16 } },
+        tooltip: {
+          backgroundColor:'#1a1d27', borderColor:'#272b3d', borderWidth:1,
+          bodyColor:'#8892a4', titleColor:'#dde3ef',
+          callbacks: { label: item => ` ${item.dataset.label}: ${item.raw.toFixed(1)}` }
+        }
+      },
+      scales: {
+        x: { ticks: { color:'#525d72', font:{ family:"'JetBrains Mono'", size:10 }, maxTicksLimit:12, maxRotation:0 }, grid: { color:'rgba(39,43,61,.4)' } },
+        y: { ticks: { color:'#525d72', font:{ family:"'JetBrains Mono'", size:10 }, callback: v => v.toFixed(0) }, grid: { color:'rgba(39,43,61,.4)' } }
+      }
+    }
+  });
+}
+
+// Barras horizontales de pesos
 function renderWeightsBar(canvasId, w, tkrs) {
   destroyChart(canvasId);
   const canvas = document.getElementById(canvasId);
   if (!canvas) return;
-  const h = Math.max(90, tkrs.length * 38 + 30);
-  canvas.parentElement.style.height = h + 'px';
+  canvas.parentElement.style.height = Math.max(90, tkrs.length * 38 + 30) + 'px';
 
   charts[canvasId] = new Chart(canvas.getContext('2d'), {
     type: 'bar',
     data: {
       labels: tkrs,
-      datasets: [{
-        data: w.map(v => v * 100),
-        backgroundColor: tkrs.map((_, i) => COLORS[i % COLORS.length] + 'bb'),
-        borderColor:     tkrs.map((_, i) => COLORS[i % COLORS.length]),
-        borderWidth: 1.5,
-        borderRadius: 4,
-        barThickness: 22
-      }]
+      datasets: [{ data: w.map(v => v*100), backgroundColor: tkrs.map((_,i) => COLORS[i%COLORS.length]+'bb'), borderColor: tkrs.map((_,i) => COLORS[i%COLORS.length]), borderWidth:1.5, borderRadius:4, barThickness:22 }]
     },
     options: {
-      indexAxis: 'y',
-      animation: { duration: 350 },
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          backgroundColor: '#1a1d27',
-          borderColor: '#272b3d',
-          borderWidth: 1,
-          callbacks: { label: item => ` ${item.raw.toFixed(1)}%` }
-        }
-      },
+      indexAxis:'y', animation:{ duration:350 }, responsive:true, maintainAspectRatio:false,
+      plugins: { legend:{ display:false }, tooltip:{ backgroundColor:'#1a1d27', borderColor:'#272b3d', borderWidth:1, callbacks:{ label: item => ` ${item.raw.toFixed(1)}%` } } },
       scales: {
-        x: {
-          max: 100,
-          ticks: { color: '#525d72', font: { family: "'JetBrains Mono'", size: 10 }, callback: v => v + '%' },
-          grid: { color: 'rgba(39,43,61,.4)' }
-        },
-        y: {
-          ticks: { color: '#8892a4', font: { family: "'JetBrains Mono'", size: 11, weight: '600' } },
-          grid: { display: false }
-        }
+        x: { max:100, ticks:{ color:'#525d72', font:{ family:"'JetBrains Mono'", size:10 }, callback: v => v+'%' }, grid:{ color:'rgba(39,43,61,.4)' } },
+        y: { ticks:{ color:'#8892a4', font:{ family:"'JetBrains Mono'", size:11, weight:'600' } }, grid:{ display:false } }
       }
     }
   });
 }
 
-// ─── Mapa de calor de correlación ─────────────────────────────
-function renderCorr(R, tkrs) {
-  const n   = tkrs.length;
-  const sz  = n <= 5 ? 50 : n <= 7 ? 44 : 38;
-  const wrap = document.getElementById('corr-matrix');
+// Contribución al riesgo (barras HTML, no Chart.js)
+function renderRiskContrib(w, C, tkrs, containerId) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  const contrib = computeRiskContrib(w, C);
+  el.innerHTML = `
+    <div class="contrib-header">
+      <span>Contribución al riesgo total</span>
+      <span class="contrib-hint">% de la varianza del portafolio</span>
+    </div>
+    ${tkrs.map((t, i) => `
+      <div class="contrib-row">
+        <span class="contrib-ticker" style="color:${COLORS[i%COLORS.length]}">${t}</span>
+        <div class="contrib-track">
+          <div class="contrib-fill" style="width:${Math.max(0,contrib[i]*100).toFixed(1)}%;background:${COLORS[i%COLORS.length]}80"></div>
+        </div>
+        <span class="contrib-val">${(contrib[i]*100).toFixed(1)}%</span>
+      </div>`).join('')}`;
+}
 
+// ─── Heatmap de correlación ────────────────────────────────────
+function renderCorr(R, tkrs) {
+  const n = tkrs.length, sz = n<=5?50:n<=7?44:38;
+  const wrap = document.getElementById('corr-matrix');
   const table = document.createElement('table');
   table.className = 'corr-table';
-
-  // Fila de encabezados
-  const thead = table.createTHead();
-  const hr    = thead.insertRow();
+  const hr = table.createTHead().insertRow();
   hr.insertCell();
-  tkrs.forEach(t => {
-    const th = document.createElement('th');
-    th.className = 'corr-col-label';
-    th.textContent = t;
-    hr.appendChild(th);
-  });
-
-  // Filas de datos
+  tkrs.forEach(t => { const th = document.createElement('th'); th.className='corr-col-label'; th.textContent=t; hr.appendChild(th); });
   const tbody = table.createTBody();
   for (let i = 0; i < n; i++) {
     const row = tbody.insertRow();
-    const lc  = row.insertCell();
-    lc.className = 'corr-row-label';
-    lc.textContent = tkrs[i];
+    const lc = row.insertCell(); lc.className='corr-row-label'; lc.textContent=tkrs[i];
     for (let j = 0; j < n; j++) {
-      const td = row.insertCell();
-      const r  = R[i][j];
+      const td = row.insertCell(), r = R[i][j];
       td.innerHTML = `<div class="corr-cell" style="width:${sz}px;height:${sz}px;background:${corrColor(r)};color:#dde3ef" title="${tkrs[i]} vs ${tkrs[j]}: ${r.toFixed(3)}">${r.toFixed(2)}</div>`;
     }
   }
-
-  wrap.innerHTML = '';
-  wrap.appendChild(table);
+  wrap.innerHTML = ''; wrap.appendChild(table);
 }
 
 // ─── Tarjetas de métricas ─────────────────────────────────────
 function renderMetrics(port, containerId) {
-  const retCol  = port.ret >= 0 ? 'c-green' : 'c-red';
+  const retCol  = port.ret  >= 0 ? 'c-green' : 'c-red';
   const shrpCol = port.sharpe >= 1 ? 'c-green' : port.sharpe >= 0 ? 'c-gold' : 'c-red';
   document.getElementById(containerId).innerHTML = `
-    <div class="metric">
-      <div class="metric-label">
-        <span class="tip" data-tip="exp(μ_log × 252) − 1. Retorno anual compuesto simple: lo que rindió la inversión en el año, siempre acotado a más de −100%.">Retorno Anual</span>
-      </div>
-      <div class="metric-value ${retCol}">${fmtPct(port.ret)}</div>
-    </div>
-    <div class="metric">
-      <div class="metric-label">
-        <span class="tip" data-tip="Desviación estándar de retornos diarios × √252. Mide cuánto fluctúa el portafolio. Mayor volatilidad = mayor riesgo.">Volatilidad Anual</span>
-      </div>
-      <div class="metric-value c-white">${fmtPct(port.vol)}</div>
-    </div>
-    <div class="metric">
-      <div class="metric-label">
-        <span class="tip" data-tip="(Retorno − 5%) / Volatilidad. Mide el retorno por unidad de riesgo. Sharpe > 1 se considera bueno; > 2 es excelente.">Ratio de Sharpe</span>
-      </div>
-      <div class="metric-value ${shrpCol}">${fmtN(port.sharpe)}</div>
-    </div>`;
+    <div class="metric"><div class="metric-label"><span class="tip" data-tip="exp(μ_log × 252) − 1. Retorno anual compuesto simple. Siempre mayor a −100%.">Retorno Anual</span></div><div class="metric-value ${retCol}">${fmtPct(port.ret)}</div></div>
+    <div class="metric"><div class="metric-label"><span class="tip" data-tip="Desviación estándar de retornos diarios × √252. Mayor valor = más oscilación del capital.">Volatilidad Anual</span></div><div class="metric-value c-white">${fmtPct(port.vol)}</div></div>
+    <div class="metric"><div class="metric-label"><span class="tip" data-tip="(Retorno − 5%) / Volatilidad. Retorno por unidad de riesgo. >1 bueno, >2 excelente.">Ratio de Sharpe</span></div><div class="metric-value ${shrpCol}">${fmtN(port.sharpe)}</div></div>`;
 }
 
-// ─── Barra de resumen superior ────────────────────────────────
-function renderSummary(maxS, minV, n) {
+// ─── Barra de resumen ────────────────────────────────────────
+function renderSummary(maxS, minV, timestamps) {
+  const fmt = ts => new Date(ts*1000).toLocaleDateString('es-AR',{month:'short',year:'numeric'});
+  const dateRange = timestamps.length > 1
+    ? `${fmt(timestamps[0])} – ${fmt(timestamps[timestamps.length-1])}`
+    : PERIOD_LABELS[periodYears] || `${periodYears}a`;
+
   document.getElementById('summary-bar').innerHTML = `
-    <div class="sum-card">
-      <div class="sum-label">Máximo Ratio de Sharpe</div>
-      <div class="sum-value c-green">${fmtN(maxS.sharpe)}</div>
-      <div class="sum-sub">${fmtPct(maxS.ret)} retorno · ${fmtPct(maxS.vol)} vol</div>
-    </div>
-    <div class="sum-card">
-      <div class="sum-label">Mínima Volatilidad</div>
-      <div class="sum-value c-white">${fmtPct(minV.vol)}</div>
-      <div class="sum-sub">${fmtPct(minV.ret)} retorno · Sharpe ${fmtN(minV.sharpe)}</div>
-    </div>
-    <div class="sum-card">
-      <div class="sum-label">Portafolios Simulados</div>
-      <div class="sum-value c-gold">${n.toLocaleString('es-AR')}</div>
-      <div class="sum-sub">Simulación Monte Carlo</div>
-    </div>
-    <div class="sum-card">
-      <div class="sum-label">Activos Analizados</div>
-      <div class="sum-value c-white">${tickers.length}</div>
-      <div class="sum-sub">${tickers.join(' · ')}</div>
-    </div>`;
+    <div class="sum-card"><div class="sum-label">Máximo Ratio de Sharpe</div><div class="sum-value c-green">${fmtN(maxS.sharpe)}</div><div class="sum-sub">${fmtPct(maxS.ret)} retorno · ${fmtPct(maxS.vol)} vol</div></div>
+    <div class="sum-card"><div class="sum-label">Mínima Volatilidad</div><div class="sum-value c-white">${fmtPct(minV.vol)}</div><div class="sum-sub">${fmtPct(minV.ret)} retorno · Sharpe ${fmtN(minV.sharpe)}</div></div>
+    <div class="sum-card"><div class="sum-label">Portafolios Simulados</div><div class="sum-value c-gold">${N_SIM.toLocaleString('es-AR')}</div><div class="sum-sub">Simulación Monte Carlo</div></div>
+    <div class="sum-card"><div class="sum-label">Período analizado</div><div class="sum-value c-white" style="font-size:14px">${dateRange}</div><div class="sum-sub">${tickers.length} activos</div></div>`;
 }
 
 // ─── Tabla de estadísticas ────────────────────────────────────
 let tableData = [], sortCol = 'annReturn', sortAsc = false;
-
 function renderTable(rows) { tableData = rows; sortRender(); }
 
 function sortRender() {
   const sorted = [...tableData].sort((a, b) => {
     let va = a[sortCol], vb = b[sortCol];
-    // Nulos siempre al final
     if (va == null && vb == null) return 0;
-    if (va == null) return 1;
-    if (vb == null) return -1;
+    if (va == null) return 1; if (vb == null) return -1;
     if (typeof va === 'string') return sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
     return sortAsc ? va - vb : vb - va;
   });
   document.getElementById('stats-tbody').innerHTML = sorted.map(s => `
     <tr>
       <td><div class="cell-ticker"><span class="tick-dot" style="background:${s.color}"></span>${s.ticker}</div></td>
-      <td class="cell-num ${s.annReturn >= 0 ? 'c-green' : 'c-red'}">${fmtPct(s.annReturn)}</td>
+      <td class="cell-num ${s.annReturn>=0?'c-green':'c-red'}">${fmtPct(s.annReturn)}</td>
       <td class="cell-num c-white">${fmtPct(s.annVol)}</td>
-      <td class="cell-num ${s.sharpe >= 0 ? 'c-green' : 'c-red'}">${fmtN(s.sharpe)}</td>
-      <td class="cell-num c-white">${s.beta != null ? fmtN(s.beta) : '<span style="opacity:.35">—</span>'}</td>
+      <td class="cell-num ${s.sharpe>=0?'c-green':'c-red'}">${fmtN(s.sharpe)}</td>
+      <td class="cell-num c-red">${fmtPct(-s.maxDD)}</td>
+      <td class="cell-num c-white">${s.beta!=null?fmtN(s.beta):'<span style="opacity:.35">—</span>'}</td>
     </tr>`).join('');
 
   document.querySelectorAll('#stats-table th.sortable').forEach(th => {
     const col = th.dataset.col;
     th.classList.toggle('sort-active', col === sortCol);
-    th.querySelector('.sort-arrow').textContent = col === sortCol ? (sortAsc ? '↑' : '↓') : '↕';
+    th.querySelector('.sort-arrow').textContent = col===sortCol ? (sortAsc?'↑':'↓') : '↕';
   });
 }
 
@@ -535,7 +514,7 @@ function initTableSort() {
   document.querySelectorAll('#stats-table th.sortable').forEach(th => {
     th.addEventListener('click', () => {
       const col = th.dataset.col;
-      if (col === sortCol) { sortAsc = !sortAsc; }
+      if (col === sortCol) sortAsc = !sortAsc;
       else { sortCol = col; sortAsc = th.dataset.type === 'str'; }
       sortRender();
     });
@@ -555,89 +534,93 @@ function initTabs() {
   });
 }
 
-// ─── Flujo principal de análisis ──────────────────────────────
+// ─── Selector de período ──────────────────────────────────────
+function initPeriodSelector() {
+  document.querySelectorAll('.prd-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.prd-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      periodYears = parseFloat(btn.dataset.period);
+    });
+  });
+}
+
+// ─── Flujo principal ──────────────────────────────────────────
 async function analyze() {
   if (tickers.length < 2) { showInputErr('Agregá al menos 2 tickers.'); return; }
-
   showLoading();
 
-  // 1 — Descarga de datos
-  const raw    = {};
-  const failed = [];
+  // 1 — Descarga de tickers del usuario
+  const raw = {}, failed = [];
   setStatus('Obteniendo datos de Yahoo Finance…');
-
   await Promise.all(tickers.map(async t => {
     setTS(t, 'loading', 'descargando…');
-    try {
-      raw[t] = await fetchPrices(t);
-      setTS(t, 'success', `${raw[t].prices.length} días`);
-    } catch (e) {
-      setTS(t, 'error', 'error');
-      failed.push(t);
-    }
+    try { raw[t] = await fetchPrices(t); setTS(t, 'success', `${raw[t].prices.length} días`); }
+    catch (e) { setTS(t, 'error', 'error'); failed.push(t); }
   }));
 
   if (failed.length) {
-    if (Object.keys(raw).length < 2) {
-      hideLoading();
-      showInputErr(`No se pudieron obtener datos de: ${failed.join(', ')}. Verificá la conexión o probá otros tickers.`);
-      return;
-    }
+    if (Object.keys(raw).length < 2) { hideLoading(); showInputErr(`No se pudieron obtener datos de: ${failed.join(', ')}.`); return; }
     failed.forEach(t => delete raw[t]);
     tickers = tickers.filter(t => !failed.includes(t));
     renderChips();
-    showInputErr(`Se omitió ${failed.join(', ')} (error de descarga). Continuando con los demás.`);
+    showInputErr(`Se omitió ${failed.join(', ')} (error de descarga).`);
   }
 
-  // 2 — Descarga silenciosa de SPY como benchmark de mercado (S&P 500)
-  setStatus('Descargando benchmark de mercado (SPY)…');
+  // 2 — Descarga silenciosa de SPY (benchmark)
+  setStatus('Descargando benchmark (SPY)…');
   let spyRaw = null;
-  try { spyRaw = await fetchPrices('SPY'); } catch (_) { /* fallback a portafolio */ }
+  try { spyRaw = await fetchPrices('SPY'); } catch (_) {}
 
-  // 3 — Alineación de series temporales (solo tickers del usuario)
+  // 3 — Alineación y retornos
   setStatus('Alineando series temporales…');
-  const aligned = alignSeries(raw);
-
-  // 4 — Retornos logarítmicos diarios
-  setStatus('Calculando retornos logarítmicos…');
+  const { prices: aligned, timestamps } = alignSeries(raw);
   const retMap = {};
   for (const t of tickers) retMap[t] = logReturns(aligned[t]);
 
-  // 5 — Retornos medios anualizados y matriz de covarianza
-  // exp(μ_log × 252) − 1  →  retorno anual compuesto simple (siempre > −100%)
-  // NUNCA usar μ_log × 252 directamente: eso da retornos de capitalización continua
-  // que pueden ser −164% (matemáticamente válido pero imposible como retorno simple).
+  // 4 — Estadísticas base
   setStatus('Construyendo matriz de covarianza…');
+  // Retorno anual compuesto: exp(μ_log × 252) − 1  (siempre > −100%)
   const mu = tickers.map(t => Math.exp(mean(retMap[t]) * DAYS) - 1);
   const C  = buildCov(retMap, tickers);
   const R  = buildCorr(C);
   const sd = tickers.map((_, i) => Math.sqrt(C[i][i]));
 
-  // 6 — Beta vs SPY (alineación pairwise: cada activo vs SPY de forma independiente)
-  //     Si SPY no está disponible, bt[i] = null → se muestra "—" en la tabla
+  // 5 — Drawdown máximo por activo
+  const maxDrawdowns = tickers.map(t => computeMaxDrawdown(aligned[t]));
+
+  // 6 — Beta pairwise vs SPY
   const bt = computeBetas(raw, tickers, spyRaw);
 
-  // 7 — Simulación Monte Carlo
+  // 7 — SPY stats para la frontera
+  let spyStats = null;
+  if (spyRaw) {
+    const sr  = logReturns(spyRaw.prices);
+    const smu = Math.exp(mean(sr) * DAYS) - 1;
+    const svl = Math.sqrt(cov(sr, sr) * DAYS);
+    spyStats  = { ret: smu, vol: svl, sharpe: (smu - RF) / svl };
+  }
+
+  // 8 — Monte Carlo
   setStatus(`Ejecutando Monte Carlo (${N_SIM.toLocaleString('es-AR')} portafolios)…`);
   const portfolios = monteCarlo(mu, C, N_SIM);
-
   const maxS = portfolios.reduce((b, p) => p.sharpe > b.sharpe ? p : b);
   const minV = portfolios.reduce((b, p) => p.vol   < b.vol   ? p : b);
 
-  // Portafolio de pesos iguales (benchmark)
-  const eqW  = tickers.map(() => 1 / tickers.length);
-  const eqP  = { w: eqW, ret: portRet(eqW, mu), vol: Math.sqrt(portVar(eqW, C)) };
+  // Portafolio de pesos iguales (benchmark simple)
+  const eqW = tickers.map(() => 1 / tickers.length);
+  const eqP = { w: eqW, ret: portRet(eqW, mu), vol: Math.sqrt(portVar(eqW, C)) };
   eqP.sharpe = (eqP.ret - RF) / eqP.vol;
 
   results = { portfolios, maxS, minV, eqP, R, mu, C, sd, bt };
 
-  // 8 — Renderizado
+  // 9 — Renderizado
   setStatus('Generando gráficos…');
   hideLoading();
   document.getElementById('results').classList.remove('hidden');
 
-  renderSummary(maxS, minV, N_SIM);
-  renderFrontier(portfolios, maxS, minV);
+  renderSummary(maxS, minV, timestamps);
+  renderFrontier(portfolios, maxS, minV, spyStats);
 
   renderMetrics(maxS, 'metrics-max-sharpe');
   renderMetrics(minV, 'metrics-min-var');
@@ -647,6 +630,11 @@ async function analyze() {
   renderWeightsBar('wc-min-var',    minV.w, tickers);
   renderWeightsBar('wc-equal',      eqP.w,  tickers);
 
+  renderRiskContrib(maxS.w, C, tickers, 'contrib-max-sharpe');
+  renderRiskContrib(minV.w, C, tickers, 'contrib-min-var');
+  renderRiskContrib(eqP.w,  C, tickers, 'contrib-equal');
+
+  renderNormalizedPrices(aligned, tickers, timestamps);
   renderCorr(R, tickers);
 
   renderTable(tickers.map((t, i) => ({
@@ -654,6 +642,7 @@ async function analyze() {
     annReturn: mu[i],
     annVol:    sd[i],
     sharpe:    (mu[i] - RF) / sd[i],
+    maxDD:     maxDrawdowns[i],
     beta:      bt[i],
     color:     COLORS[i % COLORS.length]
   })));
@@ -664,16 +653,13 @@ function init() {
   renderChips();
   initTabs();
   initTableSort();
+  initPeriodSelector();
 
   const input  = document.getElementById('ticker-input');
   const addBtn = document.getElementById('add-ticker-btn');
   const runBtn = document.getElementById('analyze-btn');
 
-  addBtn.addEventListener('click', () => {
-    const v = input.value.trim();
-    if (v) { addTicker(v); input.value = ''; }
-  });
-
+  addBtn.addEventListener('click', () => { const v=input.value.trim(); if(v){ addTicker(v); input.value=''; } });
   input.addEventListener('keydown', e => {
     if (e.key === 'Enter' || e.key === ',') {
       e.preventDefault();
@@ -681,7 +667,6 @@ function init() {
       if (v) { addTicker(v); input.value = ''; }
     }
   });
-
   runBtn.addEventListener('click', analyze);
 }
 
