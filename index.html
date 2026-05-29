@@ -245,7 +245,7 @@
                       <span class="sort-arrow">↕</span>
                     </th>
                     <th class="sortable" data-col="beta" data-type="num">
-                      <span class="tip" data-tip="Sensibilidad del activo respecto al primer ticker. Beta > 1 = más volátil que la referencia. Beta < 1 = más estable.">Beta</span>
+                      <span class="tip" data-tip="Sensibilidad del activo respecto al portafolio igual-ponderado de todos los activos cargados. Beta > 1 = se mueve más que el grupo. La media de todos los betas siempre es 1.0.">Beta</span>
                       <span class="sort-arrow">↕</span>
                     </th>
                   </tr>
@@ -271,8 +271,8 @@
                     <div class="formula">S = (μ − r<sub>f</sub>) / σ &nbsp;·&nbsp; S > 1 es considerado bueno</div>
                   </li>
                   <li>
-                    <strong>Beta:</strong> sensibilidad respecto al primer ticker de tu lista (no a un índice de mercado).
-                    <div class="formula">β = Cov(Activo, Referencia) / Var(Referencia)</div>
+                    <strong>Beta:</strong> sensibilidad de cada activo respecto al <em>portafolio igual-ponderado</em> de todos los activos cargados. No es el beta de mercado tradicional (vs. S&amp;P 500). Por construcción, la media de todos los betas siempre es 1.0.
+                    <div class="formula">β = Cov(r<sub>activo</sub>, r<sub>portafolio</sub>) / Var(r<sub>portafolio</sub>)</div>
                   </li>
                 </ul>
               </div>

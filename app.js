@@ -171,11 +171,18 @@ function monteCarlo(mu, C, n) {
   return portfolios;
 }
 
-// Beta de cada activo respecto al primero: Cov(i, ref) / Var(ref)
+// Beta de cada activo respecto al portafolio igual-ponderado de todos los activos.
+// Propiedad matemática: la media de los betas = 1.0 siempre.
+// Fórmula: β_i = Cov(r_i, r_mkt) / Var(r_mkt)
 function betas(retMap, keys) {
-  const mkt    = retMap[keys[0]];
+  const T = retMap[keys[0]].length;
+  // Proxy de mercado: retorno diario del portafolio igual-ponderado
+  const mkt = Array.from({ length: T }, (_, t) =>
+    keys.reduce((sum, k) => sum + retMap[k][t], 0) / keys.length
+  );
   const mktVar = cov(mkt, mkt);
-  return keys.map(k => k === keys[0] ? 1 : cov(retMap[k], mkt) / mktVar);
+  if (mktVar === 0) return keys.map(() => 1);
+  return keys.map(k => cov(retMap[k], mkt) / mktVar);
 }
 
 // ─── Chips de tickers ─────────────────────────────────────────
