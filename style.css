@@ -596,6 +596,142 @@ body {
 }
 
 /* ============================================================
+   AMOUNT INPUT
+   ============================================================ */
+.amount-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg);
+  border: 1.5px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  transition: border-color .18s;
+}
+.amount-row:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+.amount-label {
+  font-size: 12px;
+  color: var(--text-2);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.amount-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+.amount-currency {
+  font-family: var(--mono);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.amount-input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 15px;
+  font-weight: 600;
+  outline: none;
+  letter-spacing: .02em;
+}
+.amount-input::placeholder { color: var(--text-3); font-weight: 400; }
+.amount-input::-webkit-inner-spin-button,
+.amount-input::-webkit-outer-spin-button { -webkit-appearance: none; }
+.amount-hint {
+  font-size: 10px;
+  color: var(--text-3);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ============================================================
+   CAPITAL BREAKDOWN (por activo)
+   ============================================================ */
+.breakdown-wrap {
+  margin-top: 16px;
+  padding: 14px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  animation: fadeUp .25s ease;
+}
+.breakdown-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.breakdown-title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.breakdown-total {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent);
+}
+.breakdown-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(255,255,255,.04);
+}
+.breakdown-row:last-child { border-bottom: none; }
+.bd-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.bd-ticker {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  width: 46px;
+  flex-shrink: 0;
+}
+.bd-pct {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-3);
+  width: 44px;
+  flex-shrink: 0;
+}
+.bd-bar-wrap {
+  flex: 1;
+  height: 5px;
+  background: var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.bd-bar {
+  height: 100%;
+  border-radius: 3px;
+  transition: width .4s ease;
+}
+.bd-amount {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  text-align: right;
+  white-space: nowrap;
+  min-width: 72px;
+}
+
+/* ============================================================
    PERIOD SELECTOR
    ============================================================ */
 .period-row {

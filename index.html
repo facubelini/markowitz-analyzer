@@ -138,6 +138,18 @@
 
         <section class="card">
           <div class="card-header"><h2>Pesos del Portafolio</h2></div>
+
+          <!-- Input de capital disponible -->
+          <div class="amount-row">
+            <span class="amount-label">Capital a invertir:</span>
+            <div class="amount-input-wrap">
+              <span class="amount-currency">$</span>
+              <input type="number" id="investment-amount" class="amount-input"
+                     placeholder="10000" min="0" step="1" autocomplete="off">
+            </div>
+            <span class="amount-hint">opcional · se actualiza al instante</span>
+          </div>
+
           <div class="tab-bar">
             <button class="tab-btn active" data-tab="max-sharpe">Máx. Sharpe</button>
             <button class="tab-btn" data-tab="min-var">Mín. Varianza</button>
@@ -148,16 +160,19 @@
             <div id="metrics-max-sharpe" class="metrics-row"></div>
             <div class="chart-wrap chart-wrap--weights"><canvas id="wc-max-sharpe"></canvas></div>
             <div id="contrib-max-sharpe" class="contrib-wrap"></div>
+            <div id="breakdown-max-sharpe" class="breakdown-wrap hidden"></div>
           </div>
           <div id="tab-min-var" class="tab-panel">
             <div id="metrics-min-var" class="metrics-row"></div>
             <div class="chart-wrap chart-wrap--weights"><canvas id="wc-min-var"></canvas></div>
             <div id="contrib-min-var" class="contrib-wrap"></div>
+            <div id="breakdown-min-var" class="breakdown-wrap hidden"></div>
           </div>
           <div id="tab-equal" class="tab-panel">
             <div id="metrics-equal" class="metrics-row"></div>
             <div class="chart-wrap chart-wrap--weights"><canvas id="wc-equal"></canvas></div>
             <div id="contrib-equal" class="contrib-wrap"></div>
+            <div id="breakdown-equal" class="breakdown-wrap hidden"></div>
           </div>
 
           <details class="info-panel">

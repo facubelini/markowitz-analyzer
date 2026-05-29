@@ -13,10 +13,11 @@ const COLORS = [
 ];
 
 // ─── Estado global ────────────────────────────────────────────
-let tickers     = ['AAPL','MSFT','GOOGL','AMZN'];
-let periodYears = 2;
-let results     = null;
-const charts    = {};
+let tickers          = ['AAPL','MSFT','GOOGL','AMZN'];
+let periodYears      = 2;
+let investmentAmount = 0;
+let results          = null;
+const charts         = {};
 
 // ─── Utilidades ───────────────────────────────────────────────
 const lerp   = (a, b, t) => a + (b - a) * t;
@@ -534,6 +535,60 @@ function initTabs() {
   });
 }
 
+// ─── Distribución de capital ───────────────────────────────────
+function formatMoney(amount) {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency', currency: 'USD',
+    minimumFractionDigits: amount < 1000 ? 2 : 0,
+    maximumFractionDigits: amount < 1000 ? 2 : 0
+  }).format(amount);
+}
+
+function renderCapitalBreakdown(weights, tkrs, amount, containerId) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+
+  if (!amount || amount <= 0) {
+    el.classList.add('hidden');
+    el.innerHTML = '';
+    return;
+  }
+
+  el.classList.remove('hidden');
+  el.innerHTML = `
+    <div class="breakdown-header">
+      <span class="breakdown-title">💰 Distribución del capital</span>
+      <span class="breakdown-total">${formatMoney(amount)}</span>
+    </div>
+    ${tkrs.map((t, i) => {
+      const pct = weights[i];
+      const amt = amount * pct;
+      return `
+        <div class="breakdown-row">
+          <span class="bd-dot" style="background:${COLORS[i % COLORS.length]}"></span>
+          <span class="bd-ticker">${t}</span>
+          <span class="bd-pct">${fmtPct(pct)}</span>
+          <div class="bd-bar-wrap">
+            <div class="bd-bar" style="width:${(pct*100).toFixed(1)}%;background:${COLORS[i % COLORS.length]}80"></div>
+          </div>
+          <span class="bd-amount">${formatMoney(amt)}</span>
+        </div>`;
+    }).join('')}`;
+}
+
+function updateBreakdowns() {
+  if (!results || !investmentAmount) {
+    ['breakdown-max-sharpe','breakdown-min-var','breakdown-equal'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) { el.classList.add('hidden'); el.innerHTML = ''; }
+    });
+    return;
+  }
+  renderCapitalBreakdown(results.maxS.w, tickers, investmentAmount, 'breakdown-max-sharpe');
+  renderCapitalBreakdown(results.minV.w, tickers, investmentAmount, 'breakdown-min-var');
+  renderCapitalBreakdown(results.eqP.w,  tickers, investmentAmount, 'breakdown-equal');
+}
+
 // ─── Selector de período ──────────────────────────────────────
 function initPeriodSelector() {
   document.querySelectorAll('.prd-btn').forEach(btn => {
@@ -646,6 +701,9 @@ async function analyze() {
     beta:      bt[i],
     color:     COLORS[i % COLORS.length]
   })));
+
+  // Si el usuario ya había ingresado un monto, mostrar la distribución
+  updateBreakdowns();
 }
 
 // ─── Inicialización ───────────────────────────────────────────
@@ -658,6 +716,13 @@ function init() {
   const input  = document.getElementById('ticker-input');
   const addBtn = document.getElementById('add-ticker-btn');
   const runBtn = document.getElementById('analyze-btn');
+
+  // Listener de monto de inversión
+  const amountInput = document.getElementById('investment-amount');
+  amountInput.addEventListener('input', () => {
+    investmentAmount = parseFloat(amountInput.value) || 0;
+    updateBreakdowns();
+  });
 
   addBtn.addEventListener('click', () => { const v=input.value.trim(); if(v){ addTicker(v); input.value=''; } });
   input.addEventListener('keydown', e => {
