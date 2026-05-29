@@ -595,6 +595,115 @@ body {
   .btn-large { justify-content: center; }
 }
 
+/* ============================================================
+   THEORY INTRO
+   ============================================================ */
+.theory-intro {
+  background: linear-gradient(135deg, rgba(0,212,170,.06) 0%, rgba(0,212,170,.02) 100%);
+  border: 1px solid rgba(0,212,170,.18);
+  border-radius: var(--r-md);
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.65;
+  margin-bottom: 18px;
+  padding: 13px 16px;
+}
+.theory-intro strong { color: var(--text); }
+.theory-intro em { color: var(--accent); font-style: normal; font-weight: 500; }
+
+/* ============================================================
+   INFO PANELS (colapsables educativos)
+   ============================================================ */
+.info-panel {
+  background: rgba(0,212,170,.03);
+  border: 1px solid rgba(0,212,170,.14);
+  border-radius: var(--r-md);
+  margin-top: 16px;
+  overflow: hidden;
+}
+.info-panel summary {
+  align-items: center;
+  color: var(--accent);
+  cursor: pointer;
+  display: flex;
+  font-size: 12px;
+  font-weight: 600;
+  gap: 7px;
+  list-style: none;
+  padding: 10px 14px;
+  user-select: none;
+  transition: background .15s;
+}
+.info-panel summary:hover { background: rgba(0,212,170,.05); }
+.info-panel summary::-webkit-details-marker { display: none; }
+.info-panel summary::before { content: '💡'; font-size: 13px; }
+.info-panel summary::after  { content: ' ▼'; font-size: 9px; opacity: .5; margin-left: auto; }
+.info-panel[open] summary::after { content: ' ▲'; }
+
+.info-body {
+  border-top: 1px solid rgba(0,212,170,.1);
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.7;
+  padding: 13px 16px 15px;
+}
+.info-body p  { margin-bottom: 9px; }
+.info-body p:last-child { margin-bottom: 0; }
+.info-body strong { color: var(--text); }
+.info-body em { color: var(--accent); font-style: normal; }
+.info-body ul { padding-left: 18px; margin: 8px 0 10px; }
+.info-body li { margin-bottom: 6px; }
+
+.formula {
+  background: var(--bg);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 6px 6px 0;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+  margin: 8px 0;
+  padding: 8px 14px;
+}
+
+/* ============================================================
+   TOOLTIPS en términos técnicos
+   ============================================================ */
+.tip {
+  border-bottom: 1px dashed var(--text-3);
+  cursor: help;
+  position: relative;
+}
+.tip::after {
+  background: #252a3e;
+  border: 1px solid var(--border-hi);
+  border-radius: 8px;
+  bottom: calc(100% + 8px);
+  box-shadow: 0 8px 24px rgba(0,0,0,.5);
+  color: var(--text);
+  content: attr(data-tip);
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 400;
+  left: 50%;
+  letter-spacing: 0;
+  line-height: 1.6;
+  opacity: 0;
+  padding: 9px 13px;
+  pointer-events: none;
+  position: absolute;
+  text-transform: none;
+  transform: translateX(-50%);
+  transition: opacity .18s, transform .18s;
+  transform-origin: bottom center;
+  white-space: normal;
+  width: 240px;
+  z-index: 200;
+}
+.tip:hover::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(-2px);
+}
+
 /* Scrollbar */
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: var(--bg); }

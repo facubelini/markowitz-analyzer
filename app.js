@@ -1,10 +1,10 @@
 'use strict';
 
-// ─── Constants ───────────────────────────────────────────────
-const RF          = 0.05;    // risk-free rate (5 %)
-const DAYS        = 252;     // trading days / year
-const N_SIM       = 5000;    // Monte Carlo portfolios
-const YEARS       = 2;       // lookback window
+// ─── Constantes ───────────────────────────────────────────────
+const RF     = 0.05;   // tasa libre de riesgo (5 %)
+const DAYS   = 252;    // días hábiles / año
+const N_SIM  = 5000;   // portafolios Monte Carlo
+const YEARS  = 2;      // ventana histórica
 
 const COLORS = [
   '#00d4aa','#ff6b6b','#4ecdc4','#45b7d1',
@@ -12,19 +12,20 @@ const COLORS = [
   '#55efc4','#fdcb6e'
 ];
 
-// ─── State ───────────────────────────────────────────────────
+// ─── Estado global ────────────────────────────────────────────
 let tickers  = ['AAPL','MSFT','GOOGL','AMZN'];
 let results  = null;
 const charts = {};
 
-// ─── Helpers ─────────────────────────────────────────────────
-const lerp = (a, b, t) => a + (b - a) * t;
-const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+// ─── Utilidades ───────────────────────────────────────────────
+const lerp   = (a, b, t) => a + (b - a) * t;
+const clamp  = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const fmtPct = (v, d = 1) => (v * 100).toFixed(d) + '%';
 const fmtN   = (v, d = 2) => v.toFixed(d);
 const isValidTicker = t => /^[A-Z0-9]{1,5}(\.[A-Z]{1,2})?$/.test(t);
 
-function sharpeColor(t) {            // t in [0,1]  blue→teal→gold
+// Convierte un Ratio de Sharpe normalizado [0,1] en un color azul→teal→dorado
+function sharpeColor(t) {
   t = clamp(t, 0, 1);
   if (t < 0.5) {
     const s = t * 2;
@@ -34,16 +35,16 @@ function sharpeColor(t) {            // t in [0,1]  blue→teal→gold
   return `rgba(${Math.round(lerp(0,255,s))},${Math.round(lerp(212,210,s))},${Math.round(lerp(170,0,s))},0.75)`;
 }
 
-function corrColor(r) {              // r in [-1,1]  red→dark→teal
+// Convierte correlación [-1,1] en color rojo→oscuro→teal
+function corrColor(r) {
   r = clamp(r, -1, 1);
-  if (r >= 0) {
+  if (r >= 0)
     return `rgb(${Math.round(lerp(40,0,r))},${Math.round(lerp(45,168,r))},${Math.round(lerp(62,118,r))})`;
-  }
   const a = -r;
   return `rgb(${Math.round(lerp(40,200,a))},${Math.round(lerp(45,48,a))},${Math.round(lerp(62,60,a))})`;
 }
 
-// ─── Data Fetching ───────────────────────────────────────────
+// ─── Obtención de datos ───────────────────────────────────────
 async function getJSON(url) {
   const r = await fetch(url);
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -59,13 +60,14 @@ async function fetchPrices(ticker) {
   try {
     data = await getJSON(base);
   } catch (_) {
+    // Fallback con proxy CORS
     data = await getJSON(`https://corsproxy.io/?${encodeURIComponent(base)}`);
   }
 
-  if (data?.chart?.error) throw new Error(data.chart.error.description || 'Not found');
+  if (data?.chart?.error) throw new Error(data.chart.error.description || 'No encontrado');
 
   const res = data?.chart?.result?.[0];
-  if (!res) throw new Error('No data');
+  if (!res) throw new Error('Sin datos');
 
   const ts     = res.timestamp || [];
   const prices = res.indicators?.adjclose?.[0]?.adjclose
@@ -76,10 +78,11 @@ async function fetchPrices(ticker) {
     .map((t, i) => ({ t, p: prices[i] }))
     .filter(x => x.p != null && x.p > 0);
 
-  if (valid.length < 50) throw new Error('Insufficient data');
+  if (valid.length < 50) throw new Error('Datos insuficientes');
   return { ts: valid.map(x => x.t), prices: valid.map(x => x.p) };
 }
 
+// Alinea todas las series a fechas comunes
 function alignSeries(dataMap) {
   const keys = Object.keys(dataMap);
   const sets  = keys.map(k => new Set(dataMap[k].ts.map(String)));
@@ -96,7 +99,9 @@ function alignSeries(dataMap) {
   return out;
 }
 
-// ─── Math ────────────────────────────────────────────────────
+// ─── Matemática financiera ────────────────────────────────────
+
+// Retornos logarítmicos diarios: ln(Pₜ / Pₜ₋₁)
 function logReturns(prices) {
   const r = [];
   for (let i = 1; i < prices.length; i++)
@@ -113,6 +118,7 @@ function cov(a, b) {
   return s / (a.length - 1);
 }
 
+// Matriz de covarianza anualizada (× 252)
 function buildCov(retMap, keys) {
   const n = keys.length;
   const C = Array.from({length: n}, () => new Array(n).fill(0));
@@ -124,6 +130,7 @@ function buildCov(retMap, keys) {
   return C;
 }
 
+// Matriz de correlación a partir de la covarianza
 function buildCorr(C) {
   const n = C.length;
   const R = Array.from({length: n}, () => new Array(n).fill(0));
@@ -134,6 +141,7 @@ function buildCorr(C) {
   return R;
 }
 
+// Varianza del portafolio: wᵀ · C · w
 function portVar(w, C) {
   let v = 0;
   for (let i = 0; i < w.length; i++)
@@ -141,14 +149,17 @@ function portVar(w, C) {
   return v;
 }
 
+// Retorno esperado del portafolio: Σ wᵢ · μᵢ
 function portRet(w, mu) { return w.reduce((s, wi, i) => s + wi * mu[i], 0); }
 
+// Pesos aleatorios con distribución Dirichlet (via exponenciales)
 function randWeights(n) {
   const u = Array.from({length: n}, () => -Math.log(Math.random() + 1e-10));
   const s = u.reduce((a, b) => a + b, 0);
   return u.map(x => x / s);
 }
 
+// Simulación Monte Carlo: genera N portafolios aleatorios
 function monteCarlo(mu, C, n) {
   const portfolios = [];
   for (let k = 0; k < n; k++) {
@@ -160,13 +171,14 @@ function monteCarlo(mu, C, n) {
   return portfolios;
 }
 
+// Beta de cada activo respecto al primero: Cov(i, ref) / Var(ref)
 function betas(retMap, keys) {
-  const mkt = retMap[keys[0]];
+  const mkt    = retMap[keys[0]];
   const mktVar = cov(mkt, mkt);
   return keys.map(k => k === keys[0] ? 1 : cov(retMap[k], mkt) / mktVar);
 }
 
-// ─── Ticker Chips ─────────────────────────────────────────────
+// ─── Chips de tickers ─────────────────────────────────────────
 function renderChips() {
   const el = document.getElementById('ticker-chips');
   el.innerHTML = '';
@@ -177,7 +189,7 @@ function renderChips() {
     chip.innerHTML = `
       <span class="chip-color-dot" style="background:${COLORS[i % COLORS.length]}"></span>
       <span>${t}</span>
-      <button class="chip-remove" aria-label="Remove ${t}">×</button>`;
+      <button class="chip-remove" aria-label="Eliminar ${t}">×</button>`;
     chip.querySelector('.chip-remove').onclick = () => { tickers = tickers.filter(x => x !== t); renderChips(); };
     el.appendChild(chip);
   });
@@ -185,14 +197,13 @@ function renderChips() {
 }
 
 function addTicker(raw) {
-  const err = document.getElementById('ticker-error');
-  err.classList.add('hidden');
+  document.getElementById('ticker-error').classList.add('hidden');
   const parts = raw.split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
   let added = 0;
   for (const t of parts) {
-    if (!isValidTicker(t))    { showInputErr(`"${t}" is not a valid ticker.`); continue; }
-    if (tickers.includes(t))  { showInputErr(`"${t}" is already added.`); continue; }
-    if (tickers.length >= 10) { showInputErr('Max 10 tickers allowed.'); break; }
+    if (!isValidTicker(t))    { showInputErr(`"${t}" no es un ticker válido.`); continue; }
+    if (tickers.includes(t))  { showInputErr(`"${t}" ya está en el portafolio.`); continue; }
+    if (tickers.length >= 10) { showInputErr('Máximo 10 tickers permitidos.'); break; }
     tickers.push(t);
     added++;
   }
@@ -206,17 +217,16 @@ function showInputErr(msg) {
   setTimeout(() => el.classList.add('hidden'), 4000);
 }
 
-// ─── Loading UI ───────────────────────────────────────────────
+// ─── UI de carga ──────────────────────────────────────────────
 function showLoading() {
   document.getElementById('loading-state').classList.remove('hidden');
   document.getElementById('results').classList.add('hidden');
   document.getElementById('analyze-btn').disabled = true;
-  const list = document.getElementById('ticker-status-list');
-  list.innerHTML = tickers.map(t => `
+  document.getElementById('ticker-status-list').innerHTML = tickers.map(t => `
     <div class="ts-item" id="ts-${t}">
       <span class="ts-dot"></span>
       <span>${t}</span>
-      <span class="ts-msg" style="color:var(--text-3);font-size:11px">waiting…</span>
+      <span class="ts-msg" style="color:var(--text-3);font-size:11px">esperando…</span>
     </div>`).join('');
 }
 
@@ -237,7 +247,7 @@ function hideLoading() {
   document.getElementById('analyze-btn').disabled = tickers.length < 2;
 }
 
-// ─── Charts ──────────────────────────────────────────────────
+// ─── Gráficos ─────────────────────────────────────────────────
 function destroyChart(id) { if (charts[id]) { charts[id].destroy(); delete charts[id]; } }
 
 function renderFrontier(portfolios, maxS, minV) {
@@ -258,7 +268,7 @@ function renderFrontier(portfolios, maxS, minV) {
       data: {
         datasets: [
           {
-            label: 'Portfolios',
+            label: 'Portafolios',
             data: dots,
             backgroundColor: cols,
             pointRadius: 3.5,
@@ -266,7 +276,7 @@ function renderFrontier(portfolios, maxS, minV) {
             order: 3
           },
           {
-            label: 'Max Sharpe',
+            label: 'Máximo Sharpe',
             data: [{ x: maxS.vol * 100, y: maxS.ret * 100, _w: maxS.w, _s: maxS.sharpe }],
             backgroundColor: '#00e87a',
             borderColor: '#fff',
@@ -277,7 +287,7 @@ function renderFrontier(portfolios, maxS, minV) {
             order: 1
           },
           {
-            label: 'Min Variance',
+            label: 'Mínima Varianza',
             data: [{ x: minV.vol * 100, y: minV.ret * 100, _w: minV.w, _s: minV.sharpe }],
             backgroundColor: '#ff8c00',
             borderColor: '#fff',
@@ -306,32 +316,31 @@ function renderFrontier(portfolios, maxS, minV) {
             callbacks: {
               title: items => {
                 const lbl = items[0].dataset.label;
-                return lbl === 'Max Sharpe' ? '★ Maximum Sharpe Portfolio'
-                     : lbl === 'Min Variance' ? '▲ Minimum Variance Portfolio'
-                     : 'Simulated Portfolio';
+                return lbl === 'Máximo Sharpe'   ? '★ Portafolio de Máximo Sharpe'
+                     : lbl === 'Mínima Varianza' ? '▲ Portafolio de Mínima Varianza'
+                     : 'Portafolio Simulado';
               },
               label: item => {
                 const d = item.raw;
-                const lines = [
-                  ` Return:     ${fmtPct(d.y / 100)}`,
-                  ` Volatility: ${fmtPct(d.x / 100)}`,
-                  ` Sharpe:     ${fmtN(d._s)}`,
-                  ' ─────────────────',
+                return [
+                  ` Retorno:      ${fmtPct(d.y / 100)}`,
+                  ` Volatilidad:  ${fmtPct(d.x / 100)}`,
+                  ` Ratio Sharpe: ${fmtN(d._s)}`,
+                  ' ─────────────────────',
                   ...tickers.map((t, i) => ` ${t.padEnd(6)} ${fmtPct(d._w[i])}`)
                 ];
-                return lines;
               }
             }
           }
         },
         scales: {
           x: {
-            title: { display: true, text: 'Annualized Volatility (%)', color: '#525d72', font: { family: "'Inter'", size: 11 } },
+            title: { display: true, text: 'Volatilidad Anualizada (%)', color: '#525d72', font: { family: "'Inter'", size: 11 } },
             ticks: { color: '#525d72', font: { family: "'JetBrains Mono'", size: 10 }, callback: v => v.toFixed(0) + '%' },
             grid: { color: 'rgba(39,43,61,.6)' }
           },
           y: {
-            title: { display: true, text: 'Annualized Return (%)', color: '#525d72', font: { family: "'Inter'", size: 11 } },
+            title: { display: true, text: 'Retorno Anualizado (%)', color: '#525d72', font: { family: "'Inter'", size: 11 } },
             ticks: { color: '#525d72', font: { family: "'JetBrains Mono'", size: 10 }, callback: v => v.toFixed(0) + '%' },
             grid: { color: 'rgba(39,43,61,.6)' }
           }
@@ -341,6 +350,7 @@ function renderFrontier(portfolios, maxS, minV) {
   );
 }
 
+// Gráfico de barras horizontales para pesos del portafolio
 function renderWeightsBar(canvasId, w, tkrs) {
   destroyChart(canvasId);
   const canvas = document.getElementById(canvasId);
@@ -390,7 +400,7 @@ function renderWeightsBar(canvasId, w, tkrs) {
   });
 }
 
-// ─── Correlation Heatmap ──────────────────────────────────────
+// ─── Mapa de calor de correlación ─────────────────────────────
 function renderCorr(R, tkrs) {
   const n   = tkrs.length;
   const sz  = n <= 5 ? 50 : n <= 7 ? 44 : 38;
@@ -399,10 +409,10 @@ function renderCorr(R, tkrs) {
   const table = document.createElement('table');
   table.className = 'corr-table';
 
-  // header row
+  // Fila de encabezados
   const thead = table.createTHead();
-  const hr = thead.insertRow();
-  hr.insertCell();                             // corner
+  const hr    = thead.insertRow();
+  hr.insertCell();
   tkrs.forEach(t => {
     const th = document.createElement('th');
     th.className = 'corr-col-label';
@@ -410,7 +420,7 @@ function renderCorr(R, tkrs) {
     hr.appendChild(th);
   });
 
-  // data rows
+  // Filas de datos
   const tbody = table.createTBody();
   for (let i = 0; i < n; i++) {
     const row = tbody.insertRow();
@@ -428,32 +438,60 @@ function renderCorr(R, tkrs) {
   wrap.appendChild(table);
 }
 
-// ─── Metrics Cards ─────────────────────────────────────────────
+// ─── Tarjetas de métricas ─────────────────────────────────────
 function renderMetrics(port, containerId) {
-  const retCol   = port.ret >= 0 ? 'c-green' : 'c-red';
-  const shrpCol  = port.sharpe >= 1 ? 'c-green' : port.sharpe >= 0 ? 'c-gold' : 'c-red';
+  const retCol  = port.ret >= 0 ? 'c-green' : 'c-red';
+  const shrpCol = port.sharpe >= 1 ? 'c-green' : port.sharpe >= 0 ? 'c-gold' : 'c-red';
   document.getElementById(containerId).innerHTML = `
-    <div class="metric"><div class="metric-label">Ann. Return</div><div class="metric-value ${retCol}">${fmtPct(port.ret)}</div></div>
-    <div class="metric"><div class="metric-label">Ann. Volatility</div><div class="metric-value c-white">${fmtPct(port.vol)}</div></div>
-    <div class="metric"><div class="metric-label">Sharpe Ratio</div><div class="metric-value ${shrpCol}">${fmtN(port.sharpe)}</div></div>`;
+    <div class="metric">
+      <div class="metric-label">
+        <span class="tip" data-tip="Promedio de retornos logarítmicos diarios × 252 días hábiles. Ganancia esperada anual del portafolio.">Retorno Anual</span>
+      </div>
+      <div class="metric-value ${retCol}">${fmtPct(port.ret)}</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">
+        <span class="tip" data-tip="Desviación estándar de retornos diarios × √252. Mide cuánto fluctúa el portafolio. Mayor volatilidad = mayor riesgo.">Volatilidad Anual</span>
+      </div>
+      <div class="metric-value c-white">${fmtPct(port.vol)}</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">
+        <span class="tip" data-tip="(Retorno − 5%) / Volatilidad. Mide el retorno por unidad de riesgo. Sharpe > 1 se considera bueno; > 2 es excelente.">Ratio de Sharpe</span>
+      </div>
+      <div class="metric-value ${shrpCol}">${fmtN(port.sharpe)}</div>
+    </div>`;
 }
 
-// ─── Summary Bar ──────────────────────────────────────────────
+// ─── Barra de resumen superior ────────────────────────────────
 function renderSummary(maxS, minV, n) {
   document.getElementById('summary-bar').innerHTML = `
-    <div class="sum-card"><div class="sum-label">Max Sharpe Ratio</div><div class="sum-value c-green">${fmtN(maxS.sharpe)}</div><div class="sum-sub">${fmtPct(maxS.ret)} return · ${fmtPct(maxS.vol)} vol</div></div>
-    <div class="sum-card"><div class="sum-label">Min Volatility</div><div class="sum-value c-white">${fmtPct(minV.vol)}</div><div class="sum-sub">${fmtPct(minV.ret)} return · Sharpe ${fmtN(minV.sharpe)}</div></div>
-    <div class="sum-card"><div class="sum-label">Simulated Portfolios</div><div class="sum-value c-gold">${n.toLocaleString()}</div><div class="sum-sub">Monte Carlo simulation</div></div>
-    <div class="sum-card"><div class="sum-label">Assets Analyzed</div><div class="sum-value c-white">${tickers.length}</div><div class="sum-sub">${tickers.join(' · ')}</div></div>`;
+    <div class="sum-card">
+      <div class="sum-label">Máximo Ratio de Sharpe</div>
+      <div class="sum-value c-green">${fmtN(maxS.sharpe)}</div>
+      <div class="sum-sub">${fmtPct(maxS.ret)} retorno · ${fmtPct(maxS.vol)} vol</div>
+    </div>
+    <div class="sum-card">
+      <div class="sum-label">Mínima Volatilidad</div>
+      <div class="sum-value c-white">${fmtPct(minV.vol)}</div>
+      <div class="sum-sub">${fmtPct(minV.ret)} retorno · Sharpe ${fmtN(minV.sharpe)}</div>
+    </div>
+    <div class="sum-card">
+      <div class="sum-label">Portafolios Simulados</div>
+      <div class="sum-value c-gold">${n.toLocaleString('es-AR')}</div>
+      <div class="sum-sub">Simulación Monte Carlo</div>
+    </div>
+    <div class="sum-card">
+      <div class="sum-label">Activos Analizados</div>
+      <div class="sum-value c-white">${tickers.length}</div>
+      <div class="sum-sub">${tickers.join(' · ')}</div>
+    </div>`;
 }
 
-// ─── Stats Table ──────────────────────────────────────────────
+// ─── Tabla de estadísticas ────────────────────────────────────
 let tableData = [], sortCol = 'annReturn', sortAsc = false;
 
-function renderTable(rows) {
-  tableData = rows;
-  sortRender();
-}
+function renderTable(rows) { tableData = rows; sortRender(); }
 
 function sortRender() {
   const sorted = [...tableData].sort((a, b) => {
@@ -488,7 +526,7 @@ function initTableSort() {
   });
 }
 
-// ─── Tabs ─────────────────────────────────────────────────────
+// ─── Pestañas ─────────────────────────────────────────────────
 function initTabs() {
   document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -501,23 +539,24 @@ function initTabs() {
   });
 }
 
-// ─── Main Flow ────────────────────────────────────────────────
+// ─── Flujo principal de análisis ──────────────────────────────
 async function analyze() {
-  if (tickers.length < 2) { showInputErr('Add at least 2 tickers.'); return; }
+  if (tickers.length < 2) { showInputErr('Agregá al menos 2 tickers.'); return; }
 
   showLoading();
 
-  // 1 — fetch
-  const raw = {};
+  // 1 — Descarga de datos
+  const raw    = {};
   const failed = [];
-  setStatus('Fetching price data from Yahoo Finance…');
+  setStatus('Obteniendo datos de Yahoo Finance…');
+
   await Promise.all(tickers.map(async t => {
-    setTS(t, 'loading', 'fetching…');
+    setTS(t, 'loading', 'descargando…');
     try {
       raw[t] = await fetchPrices(t);
-      setTS(t, 'success', `${raw[t].prices.length} days`);
+      setTS(t, 'success', `${raw[t].prices.length} días`);
     } catch (e) {
-      setTS(t, 'error', 'failed');
+      setTS(t, 'error', 'error');
       failed.push(t);
     }
   }));
@@ -525,47 +564,48 @@ async function analyze() {
   if (failed.length) {
     if (Object.keys(raw).length < 2) {
       hideLoading();
-      showInputErr(`Could not fetch data for: ${failed.join(', ')}. Check connection or try different tickers.`);
+      showInputErr(`No se pudieron obtener datos de: ${failed.join(', ')}. Verificá la conexión o probá otros tickers.`);
       return;
     }
     failed.forEach(t => delete raw[t]);
     tickers = tickers.filter(t => !failed.includes(t));
     renderChips();
-    showInputErr(`Skipped ${failed.join(', ')} (fetch failed). Continuing with remaining tickers.`);
+    showInputErr(`Se omitió ${failed.join(', ')} (error de descarga). Continuando con los demás.`);
   }
 
-  // 2 — align
-  setStatus('Aligning time series…');
+  // 2 — Alineación de series temporales
+  setStatus('Alineando series temporales…');
   const aligned = alignSeries(raw);
 
-  // 3 — returns
-  setStatus('Computing log returns…');
+  // 3 — Retornos logarítmicos diarios
+  setStatus('Calculando retornos logarítmicos…');
   const retMap = {};
   for (const t of tickers) retMap[t] = logReturns(aligned[t]);
 
-  // 4 — covariance
-  setStatus('Building covariance matrix…');
+  // 4 — Retornos medios anualizados y matriz de covarianza
+  setStatus('Construyendo matriz de covarianza…');
   const mu = tickers.map(t => mean(retMap[t]) * DAYS);
   const C  = buildCov(retMap, tickers);
   const R  = buildCorr(C);
   const sd = tickers.map((_, i) => Math.sqrt(C[i][i]));
   const bt = betas(retMap, tickers);
 
-  // 5 — Monte Carlo
-  setStatus(`Running Monte Carlo (${N_SIM.toLocaleString()} portfolios)…`);
+  // 5 — Simulación Monte Carlo
+  setStatus(`Ejecutando Monte Carlo (${N_SIM.toLocaleString('es-AR')} portafolios)…`);
   const portfolios = monteCarlo(mu, C, N_SIM);
 
   const maxS = portfolios.reduce((b, p) => p.sharpe > b.sharpe ? p : b);
   const minV = portfolios.reduce((b, p) => p.vol   < b.vol   ? p : b);
 
+  // Portafolio de pesos iguales (benchmark)
   const eqW  = tickers.map(() => 1 / tickers.length);
   const eqP  = { w: eqW, ret: portRet(eqW, mu), vol: Math.sqrt(portVar(eqW, C)) };
   eqP.sharpe = (eqP.ret - RF) / eqP.vol;
 
   results = { portfolios, maxS, minV, eqP, R, mu, C, sd, bt };
 
-  // 6 — render
-  setStatus('Rendering charts…');
+  // 6 — Renderizado
+  setStatus('Generando gráficos…');
   hideLoading();
   document.getElementById('results').classList.remove('hidden');
 
@@ -592,15 +632,15 @@ async function analyze() {
   })));
 }
 
-// ─── Init ─────────────────────────────────────────────────────
+// ─── Inicialización ───────────────────────────────────────────
 function init() {
   renderChips();
   initTabs();
   initTableSort();
 
-  const input   = document.getElementById('ticker-input');
-  const addBtn  = document.getElementById('add-ticker-btn');
-  const runBtn  = document.getElementById('analyze-btn');
+  const input  = document.getElementById('ticker-input');
+  const addBtn = document.getElementById('add-ticker-btn');
+  const runBtn = document.getElementById('analyze-btn');
 
   addBtn.addEventListener('click', () => {
     const v = input.value.trim();
