@@ -171,13 +171,23 @@ function monteCarlo(mu, C, n) {
   return portfolios;
 }
 
-// Beta de cada activo respecto a un benchmark externo (marketRet).
-// β_i = Cov(r_i, r_mkt) / Var(r_mkt)
-// Es una propiedad del activo: no cambia con la composición del portafolio.
-function betas(retMap, keys, marketRet) {
-  const mktVar = cov(marketRet, marketRet);
-  if (mktVar === 0) return keys.map(() => 1);
-  return keys.map(k => cov(retMap[k], marketRet) / mktVar);
+// Beta de cada activo vs SPY calculado de forma INDEPENDIENTE (alineación pairwise).
+// Cada ticker se alinea solo con SPY, sin involucrar a los demás tickers.
+// Así el beta de AAPL es siempre el mismo sin importar qué otros tickers haya.
+// Retorna null para cada activo si SPY no está disponible.
+function computeBetas(rawMap, tickerList, spyRaw) {
+  if (!spyRaw) return tickerList.map(() => null);
+  return tickerList.map(t => {
+    try {
+      // Alineación solo entre este activo y SPY
+      const pair     = alignSeries({ asset: rawMap[t], spy: spyRaw });
+      const assetRet = logReturns(pair.asset);
+      const spyRet   = logReturns(pair.spy);
+      const mktVar   = cov(spyRet, spyRet);
+      if (mktVar === 0 || assetRet.length < 30) return null;
+      return cov(assetRet, spyRet) / mktVar;
+    } catch (_) { return null; }
+  });
 }
 
 // ─── Chips de tickers ─────────────────────────────────────────
@@ -497,7 +507,11 @@ function renderTable(rows) { tableData = rows; sortRender(); }
 
 function sortRender() {
   const sorted = [...tableData].sort((a, b) => {
-    const va = a[sortCol], vb = b[sortCol];
+    let va = a[sortCol], vb = b[sortCol];
+    // Nulos siempre al final
+    if (va == null && vb == null) return 0;
+    if (va == null) return 1;
+    if (vb == null) return -1;
     if (typeof va === 'string') return sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
     return sortAsc ? va - vb : vb - va;
   });
@@ -507,7 +521,7 @@ function sortRender() {
       <td class="cell-num ${s.annReturn >= 0 ? 'c-green' : 'c-red'}">${fmtPct(s.annReturn)}</td>
       <td class="cell-num c-white">${fmtPct(s.annVol)}</td>
       <td class="cell-num ${s.sharpe >= 0 ? 'c-green' : 'c-red'}">${fmtN(s.sharpe)}</td>
-      <td class="cell-num c-white">${fmtN(s.beta)}</td>
+      <td class="cell-num c-white">${s.beta != null ? fmtN(s.beta) : '<span style="opacity:.35">—</span>'}</td>
     </tr>`).join('');
 
   document.querySelectorAll('#stats-table th.sortable').forEach(th => {
@@ -596,25 +610,9 @@ async function analyze() {
   const R  = buildCorr(C);
   const sd = tickers.map((_, i) => Math.sqrt(C[i][i]));
 
-  // 6 — Beta vs SPY (benchmark fijo e independiente del portafolio)
-  //     Si SPY no está disponible, fallback al portafolio igual-ponderado
-  let bt;
-  if (spyRaw) {
-    // Alineación separada incluyendo SPY → retornos sincronizados por fecha
-    const rawWithSpy  = Object.assign({}, raw, { _SPY_: spyRaw });
-    const alignedSpy  = alignSeries(rawWithSpy);
-    const spyRet      = logReturns(alignedSpy['_SPY_']);
-    const retMapSpy   = {};
-    for (const t of tickers) retMapSpy[t] = logReturns(alignedSpy[t]);
-    bt = betas(retMapSpy, tickers, spyRet);
-  } else {
-    // Fallback: portafolio igual-ponderado como proxy de mercado
-    const T      = retMap[tickers[0]].length;
-    const mktRet = Array.from({ length: T }, (_, t) =>
-      tickers.reduce((sum, k) => sum + retMap[k][t], 0) / tickers.length
-    );
-    bt = betas(retMap, tickers, mktRet);
-  }
+  // 6 — Beta vs SPY (alineación pairwise: cada activo vs SPY de forma independiente)
+  //     Si SPY no está disponible, bt[i] = null → se muestra "—" en la tabla
+  const bt = computeBetas(raw, tickers, spyRaw);
 
   // 7 — Simulación Monte Carlo
   setStatus(`Ejecutando Monte Carlo (${N_SIM.toLocaleString('es-AR')} portafolios)…`);
