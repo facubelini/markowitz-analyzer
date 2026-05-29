@@ -233,7 +233,7 @@
                       Ticker <span class="sort-arrow">↕</span>
                     </th>
                     <th class="sortable" data-col="annReturn" data-type="num">
-                      <span class="tip" data-tip="Promedio de retornos logarítmicos diarios × 252 días hábiles. Refleja la ganancia esperada anual del activo.">Retorno Anual</span>
+                      <span class="tip" data-tip="Retorno anual compuesto simple: exp(μ_log × 252) − 1. Siempre mayor a −100%. Equivale a la rentabilidad total del activo en el año.">Retorno Anual</span>
                       <span class="sort-arrow">↕</span>
                     </th>
                     <th class="sortable" data-col="annVol" data-type="num">
@@ -259,8 +259,9 @@
               <div class="info-body">
                 <ul>
                   <li>
-                    <strong>Retorno Anual:</strong> retorno logarítmico promedio × 252 días.
-                    <div class="formula">μ = promedio(ln(Pₜ/Pₜ₋₁)) × 252</div>
+                    <strong>Retorno Anual:</strong> retorno anual compuesto simple, convertido desde los retornos logarítmicos diarios.
+                    <div class="formula">μ = exp( promedio(ln(Pₜ/Pₜ₋₁)) × 252 ) − 1</div>
+                    <span style="font-size:12px;color:var(--text-3)">Siempre &gt; −100%. Usar solo μ_log × 252 daría valores como −164% que son imposibles como retorno simple.</span>
                   </li>
                   <li>
                     <strong>Volatilidad Anual:</strong> desviación estándar anualizada.

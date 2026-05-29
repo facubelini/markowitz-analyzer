@@ -457,7 +457,7 @@ function renderMetrics(port, containerId) {
   document.getElementById(containerId).innerHTML = `
     <div class="metric">
       <div class="metric-label">
-        <span class="tip" data-tip="Promedio de retornos logarítmicos diarios × 252 días hábiles. Ganancia esperada anual del portafolio.">Retorno Anual</span>
+        <span class="tip" data-tip="exp(μ_log × 252) − 1. Retorno anual compuesto simple: lo que rindió la inversión en el año, siempre acotado a más de −100%.">Retorno Anual</span>
       </div>
       <div class="metric-value ${retCol}">${fmtPct(port.ret)}</div>
     </div>
@@ -604,8 +604,11 @@ async function analyze() {
   for (const t of tickers) retMap[t] = logReturns(aligned[t]);
 
   // 5 — Retornos medios anualizados y matriz de covarianza
+  // exp(μ_log × 252) − 1  →  retorno anual compuesto simple (siempre > −100%)
+  // NUNCA usar μ_log × 252 directamente: eso da retornos de capitalización continua
+  // que pueden ser −164% (matemáticamente válido pero imposible como retorno simple).
   setStatus('Construyendo matriz de covarianza…');
-  const mu = tickers.map(t => mean(retMap[t]) * DAYS);
+  const mu = tickers.map(t => Math.exp(mean(retMap[t]) * DAYS) - 1);
   const C  = buildCov(retMap, tickers);
   const R  = buildCorr(C);
   const sd = tickers.map((_, i) => Math.sqrt(C[i][i]));
