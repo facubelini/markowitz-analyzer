@@ -171,18 +171,13 @@ function monteCarlo(mu, C, n) {
   return portfolios;
 }
 
-// Beta de cada activo respecto al portafolio igual-ponderado de todos los activos.
-// Propiedad matemática: la media de los betas = 1.0 siempre.
-// Fórmula: β_i = Cov(r_i, r_mkt) / Var(r_mkt)
-function betas(retMap, keys) {
-  const T = retMap[keys[0]].length;
-  // Proxy de mercado: retorno diario del portafolio igual-ponderado
-  const mkt = Array.from({ length: T }, (_, t) =>
-    keys.reduce((sum, k) => sum + retMap[k][t], 0) / keys.length
-  );
-  const mktVar = cov(mkt, mkt);
+// Beta de cada activo respecto a un benchmark externo (marketRet).
+// β_i = Cov(r_i, r_mkt) / Var(r_mkt)
+// Es una propiedad del activo: no cambia con la composición del portafolio.
+function betas(retMap, keys, marketRet) {
+  const mktVar = cov(marketRet, marketRet);
   if (mktVar === 0) return keys.map(() => 1);
-  return keys.map(k => cov(retMap[k], mkt) / mktVar);
+  return keys.map(k => cov(retMap[k], marketRet) / mktVar);
 }
 
 // ─── Chips de tickers ─────────────────────────────────────────
@@ -580,24 +575,48 @@ async function analyze() {
     showInputErr(`Se omitió ${failed.join(', ')} (error de descarga). Continuando con los demás.`);
   }
 
-  // 2 — Alineación de series temporales
+  // 2 — Descarga silenciosa de SPY como benchmark de mercado (S&P 500)
+  setStatus('Descargando benchmark de mercado (SPY)…');
+  let spyRaw = null;
+  try { spyRaw = await fetchPrices('SPY'); } catch (_) { /* fallback a portafolio */ }
+
+  // 3 — Alineación de series temporales (solo tickers del usuario)
   setStatus('Alineando series temporales…');
   const aligned = alignSeries(raw);
 
-  // 3 — Retornos logarítmicos diarios
+  // 4 — Retornos logarítmicos diarios
   setStatus('Calculando retornos logarítmicos…');
   const retMap = {};
   for (const t of tickers) retMap[t] = logReturns(aligned[t]);
 
-  // 4 — Retornos medios anualizados y matriz de covarianza
+  // 5 — Retornos medios anualizados y matriz de covarianza
   setStatus('Construyendo matriz de covarianza…');
   const mu = tickers.map(t => mean(retMap[t]) * DAYS);
   const C  = buildCov(retMap, tickers);
   const R  = buildCorr(C);
   const sd = tickers.map((_, i) => Math.sqrt(C[i][i]));
-  const bt = betas(retMap, tickers);
 
-  // 5 — Simulación Monte Carlo
+  // 6 — Beta vs SPY (benchmark fijo e independiente del portafolio)
+  //     Si SPY no está disponible, fallback al portafolio igual-ponderado
+  let bt;
+  if (spyRaw) {
+    // Alineación separada incluyendo SPY → retornos sincronizados por fecha
+    const rawWithSpy  = Object.assign({}, raw, { _SPY_: spyRaw });
+    const alignedSpy  = alignSeries(rawWithSpy);
+    const spyRet      = logReturns(alignedSpy['_SPY_']);
+    const retMapSpy   = {};
+    for (const t of tickers) retMapSpy[t] = logReturns(alignedSpy[t]);
+    bt = betas(retMapSpy, tickers, spyRet);
+  } else {
+    // Fallback: portafolio igual-ponderado como proxy de mercado
+    const T      = retMap[tickers[0]].length;
+    const mktRet = Array.from({ length: T }, (_, t) =>
+      tickers.reduce((sum, k) => sum + retMap[k][t], 0) / tickers.length
+    );
+    bt = betas(retMap, tickers, mktRet);
+  }
+
+  // 7 — Simulación Monte Carlo
   setStatus(`Ejecutando Monte Carlo (${N_SIM.toLocaleString('es-AR')} portafolios)…`);
   const portfolios = monteCarlo(mu, C, N_SIM);
 
@@ -611,7 +630,7 @@ async function analyze() {
 
   results = { portfolios, maxS, minV, eqP, R, mu, C, sd, bt };
 
-  // 6 — Renderizado
+  // 8 — Renderizado
   setStatus('Generando gráficos…');
   hideLoading();
   document.getElementById('results').classList.remove('hidden');

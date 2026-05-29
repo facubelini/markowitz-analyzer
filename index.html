@@ -245,7 +245,7 @@
                       <span class="sort-arrow">↕</span>
                     </th>
                     <th class="sortable" data-col="beta" data-type="num">
-                      <span class="tip" data-tip="Sensibilidad del activo respecto al portafolio igual-ponderado de todos los activos cargados. Beta > 1 = se mueve más que el grupo. La media de todos los betas siempre es 1.0.">Beta</span>
+                      <span class="tip" data-tip="Beta de mercado respecto al S&P 500 (ETF SPY). Es una propiedad fija del activo — no cambia según qué otros tickers tengas en el portafolio. Beta &gt; 1 = más volátil que el mercado; Beta &lt; 1 = más estable.">Beta (vs SPY)</span>
                       <span class="sort-arrow">↕</span>
                     </th>
                   </tr>
@@ -271,8 +271,8 @@
                     <div class="formula">S = (μ − r<sub>f</sub>) / σ &nbsp;·&nbsp; S > 1 es considerado bueno</div>
                   </li>
                   <li>
-                    <strong>Beta:</strong> sensibilidad de cada activo respecto al <em>portafolio igual-ponderado</em> de todos los activos cargados. No es el beta de mercado tradicional (vs. S&amp;P 500). Por construcción, la media de todos los betas siempre es 1.0.
-                    <div class="formula">β = Cov(r<sub>activo</sub>, r<sub>portafolio</sub>) / Var(r<sub>portafolio</sub>)</div>
+                    <strong>Beta (vs SPY):</strong> mide cuánto se mueve el activo en relación al S&P 500. Es descargado automáticamente (ETF SPY) y es <em>independiente de qué otros tickers tengas</em>. Valores típicos: AAPL ≈ 1.2, MSFT ≈ 0.9, TSLA ≈ 1.8, utilities ≈ 0.5.
+                    <div class="formula">β = Cov(r<sub>activo</sub>, r<sub>SPY</sub>) / Var(r<sub>SPY</sub>)</div>
                   </li>
                 </ul>
               </div>
